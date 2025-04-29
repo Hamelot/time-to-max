@@ -1,0 +1,281 @@
+package com.timetomax;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
+import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.Client;
+import net.runelite.api.Skill;
+import net.runelite.client.config.ConfigManager;
+
+import java.lang.reflect.Type;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.EnumMap;
+import java.util.Map;
+
+@Slf4j
+public class SkillsTracker {
+    private final List<SkillsSnapshot> snapshots = new CopyOnWriteArrayList<>();
+    private final ConfigManager configManager;
+    private final String configKey;
+    private final String baselineKey;
+    private final String lastResetKey;
+    private static final Gson GSON = new GsonBuilder()
+            .registerTypeAdapter(LocalDateTime.class, new LocalDateTimeAdapter())
+            .create();
+    
+    // Store baseline XP values from when tracking started in the current session
+    private final Map<Skill, Integer> baselineXp = new EnumMap<>(Skill.class);
+    private boolean baselineSet = false;
+    private LocalDateTime lastResetTime;
+
+    public SkillsTracker(ConfigManager configManager, String username) {
+        this.configManager = configManager;
+        this.configKey = "timetomax." + username + ".snapshots";
+        this.baselineKey = "timetomax." + username + ".baseline";
+        this.lastResetKey = "timetomax." + username + ".lastreset";
+        loadSnapshots();
+        loadBaseline();
+        loadLastResetTime();
+    }
+
+    public void captureSnapshot(Client client) {
+        SkillsSnapshot snapshot = new SkillsSnapshot();
+        
+        // If this is the first snapshot of the session, set the baseline
+        boolean isFirstSnapshot = !baselineSet;
+        
+        // Capture XP for all skills
+        for (Skill skill : Skill.values()) {
+            try {
+                int xp = client.getSkillExperience(skill);
+                snapshot.setExperience(skill, xp);
+                
+                // If this is the first snapshot, record the baseline XP
+                if (isFirstSnapshot) {
+                    baselineXp.put(skill, xp);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to get XP for skill: {}", skill.getName(), e);
+            }
+        }
+        
+        if (isFirstSnapshot) {
+            baselineSet = true;
+            saveBaseline();
+            log.debug("Set baseline XP values for all skills");
+        }
+        
+        snapshots.add(snapshot);
+        saveSnapshots();
+        log.debug("Captured new XP snapshot at: {}", snapshot.getTimestamp());
+    }
+    
+    public SkillsSnapshot getLatestSnapshot() {
+        if (snapshots.isEmpty()) {
+            return null;
+        }
+        return snapshots.get(snapshots.size() - 1);
+    }
+
+    /**
+     * Get the raw XP gained for a skill since the baseline was set
+     */
+    public int getSessionXpGained(Skill skill) {
+        SkillsSnapshot current = getLatestSnapshot();
+        
+        if (current == null || !baselineSet || !baselineXp.containsKey(skill)) {
+            return 0;
+        }
+        
+        return current.getExperience(skill) - baselineXp.get(skill);
+    }
+    
+    /**
+     * Checks if the baseline should be reset based on the tracking interval
+     * @param interval The current tracking interval configuration
+     * @return true if a reset is needed, false otherwise
+     */
+    public boolean shouldResetBaseline(TrackingInterval interval) {
+        if (lastResetTime == null) {
+            return true; // Never reset before, so we should reset now
+        }
+        
+        LocalDateTime now = LocalDateTime.now();
+        
+        switch (interval) {
+            case DAY:
+                // Reset if the last reset was on a different day
+                return !lastResetTime.toLocalDate().equals(now.toLocalDate());
+                
+            case WEEK:
+                // Calculate the start of the current week (Monday as first day of week)
+                LocalDate nowDate = now.toLocalDate();
+                LocalDate startOfWeek = nowDate.minusDays(nowDate.getDayOfWeek().getValue() - 1);
+                LocalDate lastResetDate = lastResetTime.toLocalDate();
+                // Reset if the last reset was in a different week
+                return lastResetDate.isBefore(startOfWeek);
+                
+            case MONTH:
+                // Reset if the last reset was in a different month
+                return lastResetTime.getMonth() != now.getMonth() || 
+                       lastResetTime.getYear() != now.getYear();
+                
+            default:
+                return false;
+        }
+    }
+    
+    private void saveBaseline() {
+        try {
+            String json = GSON.toJson(baselineXp);
+            configManager.setConfiguration("timetomax", baselineKey, json);
+            
+            // Also save the reset time
+            this.lastResetTime = LocalDateTime.now();
+            saveLastResetTime();
+            
+            log.debug("Saved baseline XP values and reset time");
+        } catch (Exception e) {
+            log.error("Failed to save baseline XP values", e);
+        }
+    }
+    
+    private void loadBaseline() {
+        try {
+            String json = configManager.getConfiguration("timetomax", baselineKey);
+            if (json != null && !json.isEmpty()) {
+                Type mapType = new TypeToken<EnumMap<Skill, Integer>>(){}.getType();
+                Map<Skill, Integer> loaded = GSON.fromJson(json, mapType);
+                if (loaded != null && !loaded.isEmpty()) {
+                    baselineXp.putAll(loaded);
+                    baselineSet = true;
+                    log.debug("Loaded baseline XP values from config");
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to load baseline XP values from config", e);
+            // Reset baseline if failed to load
+            baselineXp.clear();
+            baselineSet = false;
+        }
+    }
+    
+    private void saveLastResetTime() {
+        if (lastResetTime != null) {
+            configManager.setConfiguration("timetomax", lastResetKey, 
+                    lastResetTime.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+        }
+    }
+    
+    private void loadLastResetTime() {
+        try {
+            String timeStr = configManager.getConfiguration("timetomax", lastResetKey);
+            if (timeStr != null && !timeStr.isEmpty()) {
+                lastResetTime = LocalDateTime.parse(timeStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+                log.debug("Loaded last reset time: {}", lastResetTime);
+            } else {
+                lastResetTime = null;
+            }
+        } catch (Exception e) {
+            log.error("Failed to load last reset time", e);
+            lastResetTime = null;
+        }
+    }
+    
+    /**
+     * Reset the baseline XP values to start fresh
+     */
+    public void resetBaseline(Client client) {
+        baselineXp.clear();
+        baselineSet = false;
+        
+        // Capture new baseline values
+        for (Skill skill : Skill.values()) {
+            try {
+                int xp = client.getSkillExperience(skill);
+                baselineXp.put(skill, xp);
+            } catch (Exception e) {
+                log.warn("Failed to reset baseline XP for skill: {}", skill.getName(), e);
+            }
+        }
+        
+        baselineSet = true;
+        saveBaseline();
+        log.debug("Reset baseline XP values for all skills");
+    }
+    
+    private void saveSnapshots() {
+        // Keep only the necessary snapshots (latest + one for each interval)
+        pruneSnapshots();
+        
+        try {
+            String json = GSON.toJson(snapshots);
+            configManager.setConfiguration("timetomax", configKey, json);
+            log.debug("Saved {} snapshots to config", snapshots.size());
+        } catch (Exception e) {
+            log.error("Failed to save snapshots to config", e);
+        }
+    }
+    
+    private void loadSnapshots() {
+        try {
+            String json = configManager.getConfiguration("timetomax", configKey);
+            if (json != null && !json.isEmpty()) {
+                Type listType = new TypeToken<ArrayList<SkillsSnapshot>>(){}.getType();
+                List<SkillsSnapshot> loaded = GSON.fromJson(json, listType);
+                if (loaded != null) {
+                    snapshots.addAll(loaded);
+                    log.debug("Loaded {} snapshots from config", snapshots.size());
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to load snapshots from config", e);
+        }
+    }
+    
+    private void pruneSnapshots() {
+        // Keep latest snapshot
+        if (snapshots.isEmpty()) {
+            return;
+        }
+        
+        LocalDateTime oldestNeeded = LocalDateTime.now().minusDays(31);
+        List<SkillsSnapshot> toRemove = new ArrayList<>();
+        
+        for (int i = 0; i < snapshots.size() - 1; i++) {
+            SkillsSnapshot snapshot = snapshots.get(i);
+            if (snapshot.getTimestamp().isBefore(oldestNeeded)) {
+                toRemove.add(snapshot);
+            }
+        }
+        
+        snapshots.removeAll(toRemove);
+    }
+    
+    /**
+     * Helper class to adapt LocalDateTime to/from JSON
+     */
+    private static class LocalDateTimeAdapter implements com.google.gson.JsonSerializer<LocalDateTime>, 
+            com.google.gson.JsonDeserializer<LocalDateTime> {
+        private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+
+        @Override
+        public com.google.gson.JsonElement serialize(LocalDateTime src, java.lang.reflect.Type typeOfSrc, 
+                com.google.gson.JsonSerializationContext context) {
+            return new com.google.gson.JsonPrimitive(FORMATTER.format(src));
+        }
+
+        @Override
+        public LocalDateTime deserialize(com.google.gson.JsonElement json, java.lang.reflect.Type typeOfT, 
+                com.google.gson.JsonDeserializationContext context) {
+            return LocalDateTime.parse(json.getAsString(), FORMATTER);
+        }
+    }
+}
