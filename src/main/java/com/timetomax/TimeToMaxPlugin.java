@@ -2,6 +2,7 @@ package com.timetomax;
 
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
+import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
@@ -541,4 +542,9 @@ public class TimeToMaxPlugin extends Plugin
 		}
 	}
 
+	@Provides
+	TimeToMaxConfig provideConfig(ConfigManager configManager)
+	{
+		return configManager.getConfig(TimeToMaxConfig.class);
+	}
 }
