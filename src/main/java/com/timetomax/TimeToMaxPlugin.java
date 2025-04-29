@@ -144,7 +144,7 @@ public class TimeToMaxPlugin extends Plugin
 					log.debug("Player already logged in: {}", playerName);
 					
 					// Initialize skills tracker
-					skillsTracker = new SkillsTracker(configManager, playerName);
+					skillsTracker = new SkillsTracker(configManager, client, playerName);
 					
 					// Set the tracker in the panel
 					if (panel != null) {
@@ -234,7 +234,7 @@ public class TimeToMaxPlugin extends Plugin
 				log.debug("Player name available: {}", playerName);
 				
 				if (skillsTracker == null) {
-					skillsTracker = new SkillsTracker(configManager, playerName);
+					skillsTracker = new SkillsTracker(configManager, client, playerName);
 					
 					// Set the tracker in the panel when it's ready
 					if (panel != null) {

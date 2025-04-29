@@ -1,18 +1,12 @@
 package com.timetomax;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.Skill;
 import net.runelite.client.config.ConfigManager;
-
-import java.lang.reflect.Type;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -23,20 +17,19 @@ import java.util.Map;
 public class SkillsTracker {
     private final List<SkillsSnapshot> snapshots = new CopyOnWriteArrayList<>();
     private final ConfigManager configManager;
+    private final Client client;
     private final String configKey;
     private final String baselineKey;
     private final String lastResetKey;
-    private static final Gson GSON = new GsonBuilder()
-            .registerTypeAdapter(LocalDateTime.class, new LocalDateTimeAdapter())
-            .create();
     
     // Store baseline XP values from when tracking started in the current session
     private final Map<Skill, Integer> baselineXp = new EnumMap<>(Skill.class);
     private boolean baselineSet = false;
     private LocalDateTime lastResetTime;
 
-    public SkillsTracker(ConfigManager configManager, String username) {
+    public SkillsTracker(ConfigManager configManager, Client client, String username) {
         this.configManager = configManager;
+        this.client = client;
         this.configKey = "timetomax." + username + ".snapshots";
         this.baselineKey = "timetomax." + username + ".baseline";
         this.lastResetKey = "timetomax." + username + ".lastreset";
@@ -146,8 +139,8 @@ public class SkillsTracker {
     
     private void saveBaseline() {
         try {
-            String json = GSON.toJson(baselineXp);
-            configManager.setConfiguration("timetomax", baselineKey, json);
+            // Convert the map to a JSON string using ConfigManager
+            configManager.setConfiguration("timetomax", baselineKey, baselineXp);
             
             // Also save the reset time
             this.lastResetTime = LocalDateTime.now();
@@ -161,12 +154,25 @@ public class SkillsTracker {
     
     private void loadBaseline() {
         try {
-            String json = configManager.getConfiguration("timetomax", baselineKey);
-            if (json != null && !json.isEmpty()) {
-                Type mapType = new TypeToken<EnumMap<Skill, Integer>>(){}.getType();
-                Map<Skill, Integer> loaded = GSON.fromJson(json, mapType);
-                if (loaded != null && !loaded.isEmpty()) {
-                    baselineXp.putAll(loaded);
+            // Load the configuration directly using ConfigManager's type handling
+            baselineXp.clear();
+            Object data = configManager.getConfiguration("timetomax", baselineKey);
+            
+            if (data != null && data instanceof Map) {
+                Map<?, ?> configMap = (Map<?, ?>) data;
+                for (Map.Entry<?, ?> entry : configMap.entrySet()) {
+                    if (entry.getKey() instanceof String && entry.getValue() instanceof Number) {
+                        try {
+                            Skill skill = Skill.valueOf((String) entry.getKey());
+                            baselineXp.put(skill, ((Number) entry.getValue()).intValue());
+                        } catch (IllegalArgumentException e) {
+                            // Skip invalid skills
+                            log.debug("Skipping invalid skill name in config: {}", entry.getKey());
+                        }
+                    }
+                }
+                
+                if (!baselineXp.isEmpty()) {
                     baselineSet = true;
                     log.debug("Loaded baseline XP values from config");
                 }
@@ -228,8 +234,8 @@ public class SkillsTracker {
         pruneSnapshots();
         
         try {
-            String json = GSON.toJson(snapshots);
-            configManager.setConfiguration("timetomax", configKey, json);
+            // Store snapshots directly without needing Gson
+            configManager.setConfiguration("timetomax", configKey, snapshots);
             log.debug("Saved {} snapshots to config", snapshots.size());
         } catch (Exception e) {
             log.error("Failed to save snapshots to config", e);
@@ -238,14 +244,11 @@ public class SkillsTracker {
     
     private void loadSnapshots() {
         try {
-            String json = configManager.getConfiguration("timetomax", configKey);
-            if (json != null && !json.isEmpty()) {
-                Type listType = new TypeToken<ArrayList<SkillsSnapshot>>(){}.getType();
-                List<SkillsSnapshot> loaded = GSON.fromJson(json, listType);
-                if (loaded != null) {
-                    snapshots.addAll(loaded);
-                    log.debug("Loaded {} snapshots from config", snapshots.size());
-                }
+            // Load snapshots directly without needing Gson
+            Object data = configManager.getConfiguration("timetomax", configKey);
+            if (data instanceof List) {
+                snapshots.addAll((List<SkillsSnapshot>) data);
+                log.debug("Loaded {} snapshots from config", snapshots.size());
             }
         } catch (Exception e) {
             log.error("Failed to load snapshots from config", e);

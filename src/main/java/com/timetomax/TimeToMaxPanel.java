@@ -8,7 +8,6 @@ import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.ui.components.PluginErrorPanel;
-
 import javax.inject.Inject;
 import javax.swing.*;
 import javax.swing.border.CompoundBorder;
