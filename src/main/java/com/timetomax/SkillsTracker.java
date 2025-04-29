@@ -98,6 +98,18 @@ public class SkillsTracker {
     }
     
     /**
+     * Get the baseline XP value for a skill
+     * @param skill The skill to get baseline XP for
+     * @return The baseline XP value, or 0 if not available
+     */
+    public int getBaselineXp(Skill skill) {
+        if (!baselineSet || !baselineXp.containsKey(skill)) {
+            return 0;
+        }
+        return baselineXp.get(skill);
+    }
+    
+    /**
      * Checks if the baseline should be reset based on the tracking interval
      * @param interval The current tracking interval configuration
      * @return true if a reset is needed, false otherwise
@@ -257,6 +269,39 @@ public class SkillsTracker {
         }
         
         snapshots.removeAll(toRemove);
+    }
+    
+    /**
+     * Updates the latest snapshot without affecting the baseline
+     * This allows tracking current XP without changing the target calculations
+     */
+    public void updateLatestSnapshot(Client client) {
+        if (snapshots.isEmpty()) {
+            // If no snapshots, do a full capture instead
+            captureSnapshot(client);
+            return;
+        }
+        
+        SkillsSnapshot snapshot = new SkillsSnapshot();
+        
+        // Capture XP for all skills
+        for (Skill skill : Skill.values()) {
+            try {
+                int xp = client.getSkillExperience(skill);
+                snapshot.setExperience(skill, xp);
+            } catch (Exception e) {
+                log.warn("Failed to get XP for skill: {}", skill.getName(), e);
+            }
+        }
+        
+        // Replace the latest snapshot instead of adding a new one
+        if (!snapshots.isEmpty()) {
+            snapshots.remove(snapshots.size() - 1);
+        }
+        
+        snapshots.add(snapshot);
+        saveSnapshots();
+        log.debug("Updated latest XP snapshot at: {}", snapshot.getTimestamp());
     }
     
     /**

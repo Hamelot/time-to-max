@@ -105,6 +105,9 @@ class SkillTimeToMaxPanel extends JPanel
         // Current XP in the skill
         int currentXp = client.getSkillExperience(skill);
         
+        // Get baseline XP (the XP at the start of the tracking period)
+        int baselineXp = skillsTracker.getBaselineXp(skill);
+        
         // Get target date
         LocalDate targetDate;
         try {
@@ -116,12 +119,10 @@ class SkillTimeToMaxPanel extends JPanel
         // Get session XP gain
         int xpGainedSession = skillsTracker.getSessionXpGained(skill);
         
-        // Get XP needed for this interval 
+        // Get XP needed for this interval based on BASELINE XP, not current XP
+        // This ensures the target doesn't change as you gain XP
         TrackingInterval interval = config.trackingInterval();
-        int requiredXp = XpCalculator.getRequiredXpPerInterval(currentXp, targetDate, interval);
-        
-        // Current level and XP to max
-        int currentLevel = Experience.getLevelForXp(currentXp);
+        int requiredXp = XpCalculator.getRequiredXpPerInterval(baselineXp, targetDate, interval);
         int xpToMax = XpCalculator.MAX_XP - currentXp;
         
         // Set label values

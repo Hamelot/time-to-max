@@ -492,8 +492,10 @@ public class TimeToMaxPlugin extends Plugin
 	 * Handle an XP gain for a skill
 	 */
 	private void handleXpGain(Skill skill, int xpGained) {
-		// Update the XP snapshot
-		captureXpSnapshot();
+		// Update the latest snapshot (without affecting baseline)
+		if (skillsTracker != null) {
+			skillsTracker.updateLatestSnapshot(client);
+		}
 		
 		// Get target date and interval info
 		LocalDate targetDate;
@@ -502,33 +504,37 @@ public class TimeToMaxPlugin extends Plugin
 		} catch (DateTimeParseException e) {
 			targetDate = LocalDate.now().plusMonths(6);
 		}
-		
+			
 		TrackingInterval interval = config.trackingInterval();
-		int currentXp = client.getSkillExperience(skill);
 		int sessionXpGained = skillsTracker.getSessionXpGained(skill);
-		int requiredXp = XpCalculator.getRequiredXpPerInterval(currentXp, targetDate, interval);
-		
+		int requiredXp = XpCalculator.getRequiredXpPerInterval(skillsTracker.getBaselineXp(skill), targetDate, interval);
+			
 		// Always update the panel when XP is gained
 		if (panel != null) {
 			SwingUtilities.invokeLater(() -> panel.updateAllInfo());
 		}
-		
+			
 		// Check if we need to send a notification for reaching the required XP
 		if (config.showChatNotifications() && sessionXpGained >= requiredXp && requiredXp > 0) {
 			// Only notify once per skill per session (until reset)
 			if (!notifiedSkills.contains(skill)) {
-				String notificationMessage = String.format(
-					"You've gained enough XP in %s for this %s!",
-					skill.getName(),
-					interval.toString().toLowerCase()
-				);
-				
+				String notificationMessage = "";
+				switch (interval){
+					case WEEK:
+						notificationMessage = String.format("You've gained enough XP in %s for this %s!",
+								skill.getName(),
+								interval.toString().toLowerCase());
+						break;
+					default:
+						notificationMessage = String.format("You've gained enough XP in %s for today!", skill.getName());
+				}
+
 				// Send as a game chat message instead of a notification
 				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", 
 					"Time to Max: " + notificationMessage, null);
-				
+
 				log.debug("Sent notification for {}: {}", skill.getName(), notificationMessage);
-				
+					
 				// Mark this skill as notified
 				notifiedSkills.add(skill);
 			}
