@@ -413,46 +413,61 @@ public class SkillsTracker implements Serializable
 			return true; // Never reset before, so we should reset now
 		}
 
-		// Update the current period key based on the provided interval
-		String newPeriodKey;
-		LocalDate now = getCurrentDate();
+		// Parse the last reset time
+		LocalDateTime lastResetTime;
+		try {
+			lastResetTime = LocalDateTime.parse(lastResetTimeStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+		} catch (Exception e) {
+			log.error("Failed to parse last reset time", e);
+			return true; // If we can't parse the time, reset now
+		}
 
+		// Get current date (respecting any override for testing)
+		LocalDate currentDate = getCurrentDate();
+		
+		// Get the date part of the last reset
+		LocalDate lastResetDate = lastResetTime.toLocalDate();
+		
+		// Determine if we should reset based on interval type
 		switch (interval)
 		{
 			case DAY:
-				newPeriodKey = now.toString();
+				// Reset if the current date is different from the last reset date
+				if (!currentDate.equals(lastResetDate)) {
+					log.debug("Day changed from {} to {}, resetting baseline", lastResetDate, currentDate);
+					currentPeriodKey = currentDate.toString();
+					return true;
+				}
 				break;
+				
 			case WEEK:
-				// Calculate the start of the current week (Monday as first day of week)
-				LocalDate startOfWeek = now.minusDays(now.getDayOfWeek().getValue() - 1);
-				newPeriodKey = "WEEK-" + startOfWeek.toString();
+				// Get start of current week and last reset week
+				LocalDate currentWeekStart = currentDate.minusDays(currentDate.getDayOfWeek().getValue() - 1);
+				LocalDate lastWeekStart = lastResetDate.minusDays(lastResetDate.getDayOfWeek().getValue() - 1);
+				
+				// Reset if the week has changed
+				if (!currentWeekStart.equals(lastWeekStart)) {
+					log.debug("Week changed from {} to {}, resetting baseline", lastWeekStart, currentWeekStart);
+					currentPeriodKey = "WEEK-" + currentWeekStart.toString();
+					return true;
+				}
 				break;
+				
 			case MONTH:
-				newPeriodKey = "MONTH-" + now.getYear() + "-" + now.getMonthValue();
+				// Reset if the month or year has changed
+				if (currentDate.getYear() != lastResetDate.getYear() || 
+					currentDate.getMonthValue() != lastResetDate.getMonthValue()) {
+					log.debug("Month changed from {}-{} to {}-{}, resetting baseline", 
+						lastResetDate.getYear(), lastResetDate.getMonthValue(),
+						currentDate.getYear(), currentDate.getMonthValue());
+					currentPeriodKey = "MONTH-" + currentDate.getYear() + "-" + currentDate.getMonthValue();
+					return true;
+				}
 				break;
-			default:
-				newPeriodKey = now.toString();
 		}
-
-		// If the current period key hasn't been initialized yet, set it now
-		if (currentPeriodKey == null)
-		{
-			currentPeriodKey = newPeriodKey;
-			log.debug("Initialized current period key to: {}", currentPeriodKey);
-			return false; // No reset needed since we're just initializing
-		}
-
-		// Check if the period has changed
-		boolean shouldReset = !newPeriodKey.equals(currentPeriodKey);
-
-		if (shouldReset)
-		{
-			log.debug("Period change detected: {} -> {}", currentPeriodKey, newPeriodKey);
-			// Update the current period key
-			currentPeriodKey = newPeriodKey;
-		}
-
-		return shouldReset;
+		
+		// No reset needed
+		return false;
 	}
 
 	private void saveBaseline()
