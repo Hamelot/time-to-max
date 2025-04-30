@@ -25,6 +25,7 @@ import net.runelite.client.callback.ClientThread;
 import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.util.ImageUtil;
 import net.runelite.client.Notifier;
+import com.google.gson.Gson;
 
 import java.awt.image.BufferedImage;
 import java.awt.Color;
@@ -76,6 +77,9 @@ public class TimeToMaxPlugin extends Plugin
 	
 	@Inject
 	private Notifier notifier;
+	
+	@Inject
+	private Gson gson;
 	
 	private TimeToMaxPanel panel;
 	private NavigationButton navButton;
@@ -181,7 +185,7 @@ public class TimeToMaxPlugin extends Plugin
 					if (skillsTracker == null && hasActiveSession && savedUsername != null && 
 							savedUsername.equals(playerName)) {
 						log.info("Restoring session data for {}", playerName);
-						skillsTracker = new SkillsTracker(configManager, client, playerName);
+						skillsTracker = new SkillsTracker(configManager, client, playerName, gson);
 						
 						// Ensure we have valid baseline data
 						if (skillsTracker.hasValidBaselineData()) {
@@ -201,7 +205,7 @@ public class TimeToMaxPlugin extends Plugin
 					} 
 					// Otherwise create a new tracker if needed
 					else if (skillsTracker == null) {
-						skillsTracker = new SkillsTracker(configManager, client, playerName);
+						skillsTracker = new SkillsTracker(configManager, client, playerName, gson);
 						
 						// Save the session info for persistence
 						configManager.setConfiguration("timetomax", ACTIVE_SESSION_KEY, true);
@@ -360,7 +364,7 @@ public class TimeToMaxPlugin extends Plugin
 				log.debug("Player name available: {}", playerName);
 				
 				if (skillsTracker == null) {
-					skillsTracker = new SkillsTracker(configManager, client, playerName);
+					skillsTracker = new SkillsTracker(configManager, client, playerName, gson);
 					
 					// Check if we need to restore baseline data from previous session
 					boolean hasPreviousBaselineData = skillsTracker.hasValidBaselineData();

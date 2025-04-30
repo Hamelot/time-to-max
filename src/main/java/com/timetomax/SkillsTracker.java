@@ -1,7 +1,6 @@
 package com.timetomax;
 
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
@@ -34,6 +33,7 @@ public class SkillsTracker implements Serializable {
     private final String baselineKey;
     private final String lastResetKey;
     private final String username;
+    private final Gson gson; // Use injected Gson
     
     // Store baseline XP values from when tracking started in the current session
     private final Map<Skill, Integer> baselineXp = new EnumMap<>(Skill.class);
@@ -54,18 +54,18 @@ public class SkillsTracker implements Serializable {
     
     // File storage for more reliable persistence in test environment
     private static final File BASELINE_STORAGE_DIR = new File(RuneLite.RUNELITE_DIR, "time-to-max");
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     
     // For testing day change logic
     private static LocalDate overrideCurrentDate = null;
     
-    public SkillsTracker(ConfigManager configManager, Client client, String username) {
+    public SkillsTracker(ConfigManager configManager, Client client, String username, Gson gson) {
         this.configManager = configManager;
         this.client = client;
         this.username = username;
         this.configKey = CONFIG_GROUP + "." + username + ".snapshots";
         this.baselineKey = CONFIG_GROUP + "." + username + ".baseline";
         this.lastResetKey = CONFIG_GROUP + "." + username + ".lastreset";
+        this.gson = gson; // Store the injected Gson
         
         snapshots = new CopyOnWriteArrayList<>();
         
@@ -111,7 +111,7 @@ public class SkillsTracker implements Serializable {
             exportData.put("_timestamp", (int)(System.currentTimeMillis() / 1000));
             
             try (FileWriter writer = new FileWriter(file)) {
-                GSON.toJson(exportData, writer);
+                gson.toJson(exportData, writer);
             }
             
             log.debug("Saved baseline data to file: {}", file.getAbsolutePath());
@@ -133,7 +133,7 @@ public class SkillsTracker implements Serializable {
             
             try (FileReader reader = new FileReader(file)) {
                 Type type = new TypeToken<Map<String, Integer>>() {}.getType();
-                Map<String, Integer> importData = GSON.fromJson(reader, type);
+                Map<String, Integer> importData = gson.fromJson(reader, type);
                 
                 if (importData != null && !importData.isEmpty()) {
                     baselineXp.clear();
@@ -180,7 +180,7 @@ public class SkillsTracker implements Serializable {
             File file = getSnapshotFile();
             
             try (FileWriter writer = new FileWriter(file)) {
-                GSON.toJson(snapshot, writer);
+                gson.toJson(snapshot, writer);
             }
             
             log.debug("Saved snapshot to file: {}", file.getAbsolutePath());
@@ -200,7 +200,7 @@ public class SkillsTracker implements Serializable {
             }
             
             try (FileReader reader = new FileReader(file)) {
-                return GSON.fromJson(reader, SkillsSnapshot.class);
+                return gson.fromJson(reader, SkillsSnapshot.class);
             }
         } catch (Exception e) {
             log.error("Error loading snapshot from file", e);
