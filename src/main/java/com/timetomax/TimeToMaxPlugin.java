@@ -43,6 +43,16 @@ import java.util.Set;
 )
 public class TimeToMaxPlugin extends Plugin
 {
+    // Static field to preserve baseline data between plugin toggle cycles
+    private static SkillsTracker persistentTracker = null;
+    private static boolean hadPreviousSession = false;
+    
+    // Config keys for persistent storage between client restarts
+    private static final String ACTIVE_SESSION_KEY = "activeSession";
+    private static final String SESSION_USERNAME_KEY = "sessionUsername";
+    private static final String BASELINE_PERSIST_KEY = "timetomax.baseline.persist";
+    private static boolean hasActiveBaseline = false;
+
 	@Inject
 	private Client client;
 
@@ -74,7 +84,7 @@ public class TimeToMaxPlugin extends Plugin
 	private int loginTicks = 0;
 	private static final int WAIT_TICKS = 5; // Wait 5 ticks after login before capturing snapshot
 	
-	// Add a flag to track if the ::resetxp hint has been shown this session
+	// Add a flag to track if the ::ttm_resetxp hint has been shown this session
 	private boolean resetXpHintShown = false;
 	
 	// Track the last known XP for each skill to detect changes
@@ -82,8 +92,6 @@ public class TimeToMaxPlugin extends Plugin
 	
 	// For tracking XP changes on each game tick
 	private boolean initialXpSet = false;
-	private int tickCounter = 0;
-	private static final int CHECK_EVERY_N_TICKS = 5; // Only check every 5 ticks to reduce CPU usage
 
 	// Track active skills - ones that have had XP changes recently
 	private final Map<Skill, Integer> activeSkills = new EnumMap<>(Skill.class);
@@ -129,7 +137,29 @@ public class TimeToMaxPlugin extends Plugin
 		notifiedSkills.clear();
 		lastSkillXp.clear();
 		resetXpHintShown = false; // Reset the hint flag on startup
-		tickCounter = 0;
+		
+			// First, check if we have a tracker from plugin toggling
+		if (persistentTracker != null) {
+			log.info("Restoring previous session data from memory");
+			skillsTracker = persistentTracker;
+			hadPreviousSession = true;
+			
+			// Update the panel with the restored tracker
+			if (panel != null) {
+				panel.setSkillsTracker(skillsTracker);
+			}
+		} 
+		// If no in-memory tracker, check for saved session data in config
+		else {
+			boolean hasActiveSession = Boolean.TRUE.equals(configManager.getConfiguration("timetomax", ACTIVE_SESSION_KEY, Boolean.class));
+			String savedUsername = configManager.getConfiguration("timetomax", SESSION_USERNAME_KEY, String.class);
+			
+			if (hasActiveSession && savedUsername != null && !savedUsername.isEmpty()) {
+				log.info("Found saved session data for user: {}", savedUsername);
+				// We'll restore this once the player logs in
+				hadPreviousSession = true;
+			}
+		}
 		
 		// If the client is already logged in, initialize the plugin as if just logged in
 		if (client.getGameState() == GameState.LOGGED_IN) {
@@ -143,16 +173,64 @@ public class TimeToMaxPlugin extends Plugin
 					String playerName = player.getName();
 					log.debug("Player already logged in: {}", playerName);
 					
-					// Initialize skills tracker
-					skillsTracker = new SkillsTracker(configManager, client, playerName);
+					// Get saved username from config
+					String savedUsername = configManager.getConfiguration("timetomax", SESSION_USERNAME_KEY, String.class);
+					boolean hasActiveSession = Boolean.TRUE.equals(configManager.getConfiguration("timetomax", ACTIVE_SESSION_KEY, Boolean.class));
+					
+					// Check if we can restore a session from config
+					if (skillsTracker == null && hasActiveSession && savedUsername != null && 
+							savedUsername.equals(playerName)) {
+						log.info("Restoring session data for {}", playerName);
+						skillsTracker = new SkillsTracker(configManager, client, playerName);
+						
+						// Ensure we have valid baseline data
+						if (skillsTracker.hasValidBaselineData()) {
+							// Force a refresh of snapshot data with current XP values
+							skillsTracker.forceSnapshotRefresh();
+							hadPreviousSession = true;
+						} else {
+							// Try to load baseline from direct storage
+							skillsTracker.tryLoadDirectBaseline();
+							
+							// If that worked, force a snapshot refresh
+							if (skillsTracker.hasValidBaselineData()) {
+								skillsTracker.forceSnapshotRefresh();
+								hadPreviousSession = true;
+							}
+						}
+					} 
+					// Otherwise create a new tracker if needed
+					else if (skillsTracker == null) {
+						skillsTracker = new SkillsTracker(configManager, client, playerName);
+						
+						// Save the session info for persistence
+						configManager.setConfiguration("timetomax", ACTIVE_SESSION_KEY, true);
+						configManager.setConfiguration("timetomax", SESSION_USERNAME_KEY, playerName);
+					}
 					
 					// Set the tracker in the panel
 					if (panel != null) {
 						panel.setSkillsTracker(skillsTracker);
 					}
 					
-					// Capture initial XP values
-					captureInitialXpValues();
+					// If we've restored a previous session, we don't need to capture initial values
+					if (!hadPreviousSession) {
+						// Capture initial XP values
+						captureInitialXpValues();
+					} else {
+						// Just mark it as initialized
+						initialXpSet = true;
+						
+						// Initialize the last known XP values from current values
+						for (Skill skill : Skill.values()) {
+							try {
+								int xp = client.getSkillExperience(skill);
+								lastSkillXp.put(skill, xp);
+							} catch (Exception e) {
+								log.warn("Error getting initial XP for {}", skill.getName(), e);
+							}
+						}
+					}
 					
 					// Update the panel
 					if (panel != null) {
@@ -172,6 +250,13 @@ public class TimeToMaxPlugin extends Plugin
 	protected void shutDown() throws Exception
 	{
 		log.info("Time to Max plugin stopped!");
+		
+		// Store the tracker in the static field for persistence between toggles
+		if (skillsTracker != null) {
+			log.debug("Preserving session data for next startup");
+			persistentTracker = skillsTracker;
+		}
+		
 		lastSkillXp.clear();
 		activeSkills.clear();
 		notifiedSkills.clear();
@@ -190,14 +275,12 @@ public class TimeToMaxPlugin extends Plugin
 			loginTicks = 0;
 			initialXpSet = false;
 			activeSkills.clear();
-			tickCounter = 0;
 		} else if (gameStateChanged.getGameState() == GameState.LOGIN_SCREEN) {
 			// Reset state when logging out
 			initialXpSet = false;
 			waitingForPlayerName = false;
 			activeSkills.clear();
 			notifiedSkills.clear();
-			tickCounter = 0;
 			
 			if (panel != null) {
 				panel.showNoData();
@@ -209,9 +292,52 @@ public class TimeToMaxPlugin extends Plugin
 	public void onCommandExecuted(CommandExecuted commandExecuted)
 	{
 		// Add command to reset XP baseline
-		if (commandExecuted.getCommand().equals("resetxp"))
+		if (commandExecuted.getCommand().equals("ttm_resetxp"))
 		{
 			resetXpBaseline();
+		}
+		// Test command to set a future date for testing interval changes
+		else if (commandExecuted.getCommand().equals("ttm_setdate") && commandExecuted.getArguments().length > 0)
+		{
+			try {
+				// Try to parse the date from the argument (format: yyyy-MM-dd)
+				String dateStr = commandExecuted.getArguments()[0];
+				LocalDate testDate = LocalDate.parse(dateStr);
+				
+				// Set the override date
+				SkillsTracker.setOverrideDate(testDate);
+				
+				// Force a check for interval changes immediately
+				checkForDateChanges();
+				
+				// Show confirmation message
+				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", 
+					"Time to Max: Test date set to " + dateStr + " - interval changes will use this date", null);
+				
+				// Update the panel
+				if (panel != null) {
+					SwingUtilities.invokeLater(() -> panel.updateAllInfo());
+				}
+			} catch (Exception e) {
+				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", 
+					"Time to Max: Invalid date format. Use yyyy-MM-dd (e.g., 2025-05-01)", null);
+			}
+		}
+		// Clear any test date and go back to using real time
+		else if (commandExecuted.getCommand().equals("ttm_cleardate"))
+		{
+			SkillsTracker.clearOverrideDate();
+			
+			// Force a check for interval changes immediately
+			checkForDateChanges();
+			
+			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", 
+				"Time to Max: Test date cleared, using real date now", null);
+			
+			// Update the panel
+			if (panel != null) {
+				SwingUtilities.invokeLater(() -> panel.updateAllInfo());
+			}
 		}
 	}
 	
@@ -236,30 +362,42 @@ public class TimeToMaxPlugin extends Plugin
 				if (skillsTracker == null) {
 					skillsTracker = new SkillsTracker(configManager, client, playerName);
 					
+					// Check if we need to restore baseline data from previous session
+					boolean hasPreviousBaselineData = skillsTracker.hasValidBaselineData();
+					
+						// If no baseline data found, try to load from direct storage
+					if (!hasPreviousBaselineData) {
+						skillsTracker.tryLoadDirectBaseline();
+						hasPreviousBaselineData = skillsTracker.hasValidBaselineData();
+					}
+					
+					// Set the current period key based on tracking interval
+					skillsTracker.updateCurrentPeriodKey(config.trackingInterval());
+					
 					// Set the tracker in the panel when it's ready
 					if (panel != null) {
 						panel.setSkillsTracker(skillsTracker);
 					}
 					
-						// Check if we need to auto-reset for a new interval
-						if (skillsTracker.shouldResetBaseline(config.trackingInterval())) {
-							log.info("Detected new {} interval - automatically resetting baseline", config.trackingInterval());
-							skillsTracker.resetBaseline(client);
-							// Show message to user about auto-reset
-							client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", 
-								"Time to Max: New " + config.trackingInterval().toString().toLowerCase() + 
-								" detected - XP tracking reset automatically.", null);
-						} else {
-							// Regular welcome message
-							client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", 
-								"Time to Max: Tracking XP over " + config.trackingInterval() + " intervals.", null);
-						}
+					// If we're restored from a previous session, force a snapshot refresh
+					if (hasPreviousBaselineData) {
+						log.info("Found baseline data on login, refreshing snapshot");
+						skillsTracker.forceSnapshotRefresh();
+						hadPreviousSession = true;
+					}
+					
+					// Regular welcome message
+					client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", 
+						"Time to Max: Tracking XP over " + config.trackingInterval() + " intervals.", null);
 				}
 				
 				// Wait a few more ticks to ensure skills are loaded before capturing baseline
 				if (loginTicks >= WAIT_TICKS) {
 					captureInitialXpValues();
 					waitingForPlayerName = false;
+					
+					// Check for a real date change only once at login
+					checkForDateChanges();
 					
 					// Update the panel
 					if (panel != null) {
@@ -276,19 +414,19 @@ public class TimeToMaxPlugin extends Plugin
 		
 		// If we've initialized, manage active skills and check for XP changes
 		if (initialXpSet) {
-			tickCounter++;
 			
 			// Process active skills timeouts
 			processActiveSkills();
 			
-			// Only check for XP changes every N ticks or if we have active skills
-			if (tickCounter % CHECK_EVERY_N_TICKS == 0 || !activeSkills.isEmpty()) {
+			// Only check for XP changes if we have active skills
+			if (!activeSkills.isEmpty()) {
 				checkForXpChanges();
-			}
+				}
 			
-			// Update panel periodically
-			if (tickCounter % 50 == 0 && panel != null) {
-				SwingUtilities.invokeLater(() -> panel.updateAllInfo());
+			// Check for date changes only once every 10 minutes (600 game ticks)
+			// Game tick is ~0.6 seconds, so 600 ticks ≈ 6 minutes
+			if (client.getTickCount() % 600 == 0) {
+				checkForDateChanges();
 			}
 		}
 	}
@@ -306,9 +444,6 @@ public class TimeToMaxPlugin extends Plugin
 				// Update lastSkillXp map with current values
 				for (Skill skill : Skill.values())
 				{
-					// Skip overall skill
-					if (isOverallSkill(skill)) continue;
-					
 					try
 					{
 						int xp = client.getSkillExperience(skill);
@@ -335,13 +470,6 @@ public class TimeToMaxPlugin extends Plugin
 				return true;
 			});
 		}
-	}
-	
-	/**
-	 * Check if a skill is the Overall skill (safely handling deprecation)
-	 */
-	private boolean isOverallSkill(Skill skill) {
-		return skill.getName().equals("Overall");
 	}
 	
 	/**
@@ -380,7 +508,6 @@ public class TimeToMaxPlugin extends Plugin
 		
 		// Initialize the last known XP values
 		for (Skill skill : Skill.values()) {
-			if (isOverallSkill(skill)) continue;
 			try {
 				int xp = client.getSkillExperience(skill);
 				lastSkillXp.put(skill, xp);
@@ -393,7 +520,7 @@ public class TimeToMaxPlugin extends Plugin
 		// Only show the reset hint once per session
 		if (!resetXpHintShown) {
 			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", 
-				"Type ::resetxp to reset your XP baseline at any time.", null);
+				"Type ::ttm_resetxp to reset your XP baseline at any time.", null);
 			resetXpHintShown = true;
 		}
 	}
@@ -405,16 +532,6 @@ public class TimeToMaxPlugin extends Plugin
 		// Always check active skills first
 		for (Skill skill : activeSkills.keySet()) {
 			checkSkillXp(skill);
-		}
-		
-		// Only do a full scan occasionally
-		if (tickCounter % 10 == 0) {
-			for (Skill skill : Skill.values()) {
-				if (isOverallSkill(skill) || activeSkills.containsKey(skill)) {
-					continue; // Skip overall and already checked active skills
-				}
-				checkSkillXp(skill);
-			}
 		}
 	}
 	
@@ -452,11 +569,6 @@ public class TimeToMaxPlugin extends Plugin
 		
 		Skill skill = statChanged.getSkill();
 		int xp = statChanged.getXp();
-		
-		// Ignore OVERALL
-		if (isOverallSkill(skill)) {
-			return;
-		}
 		
 		// Mark this skill as active for future tick checks
 		activeSkills.put(skill, ACTIVE_SKILL_TIMEOUT);
@@ -519,15 +631,13 @@ public class TimeToMaxPlugin extends Plugin
 			// Only notify once per skill per session (until reset)
 			if (!notifiedSkills.contains(skill)) {
 				String notificationMessage = "";
-				switch (interval){
-					case WEEK:
-						notificationMessage = String.format("You've gained enough XP in %s for this %s!",
-								skill.getName(),
-								interval.toString().toLowerCase());
-						break;
-					default:
-						notificationMessage = String.format("You've gained enough XP in %s for today!", skill.getName());
-				}
+                if (interval == TrackingInterval.WEEK || interval == TrackingInterval.MONTH) {
+                    notificationMessage = String.format("You've gained enough XP in %s for this %s!",
+                            skill.getName(),
+                            interval.toString().toLowerCase());
+                } else {
+                    notificationMessage = String.format("You've gained enough XP in %s for today!", skill.getName());
+                }
 
 				// Send as a game chat message instead of a notification
 				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", 
@@ -545,6 +655,34 @@ public class TimeToMaxPlugin extends Plugin
 		if (skillsTracker != null && client.getLocalPlayer() != null) {
 			skillsTracker.captureSnapshot(client);
             log.debug("XP snapshot captured for {}", client.getLocalPlayer().getName());
+		}
+	}
+
+	/**
+	 * Check if we need to reset due to date changes (midnight, new week, new month)
+	 */
+	private void checkForDateChanges() {
+		if (skillsTracker != null && initialXpSet) {
+			// Check if we should reset based on the tracking interval
+			if (skillsTracker.shouldResetBaseline(config.trackingInterval())) {
+				log.info("Detected new {} interval - automatically resetting baseline", config.trackingInterval());
+				
+				// Reset the XP baseline
+				skillsTracker.resetBaseline(client);
+				
+				// Clear the notified skills list when resetting the baseline
+				notifiedSkills.clear();
+				
+				// Show message to user about auto-reset
+				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", 
+					"Time to Max: New " + config.trackingInterval().toString().toLowerCase() + 
+					" detected - XP tracking reset automatically.", null);
+				
+				// Update the panel
+				if (panel != null) {
+					SwingUtilities.invokeLater(() -> panel.updateAllInfo());
+				}
+			}
 		}
 	}
 

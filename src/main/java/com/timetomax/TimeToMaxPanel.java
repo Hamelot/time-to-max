@@ -355,11 +355,6 @@ class TimeToMaxPanel extends PluginPanel
         intervalsRemainingLabel.setText(intervalsRemaining + " " + intervalText + " remaining");
     }
 
-    private boolean isOverallSkill(Skill skill) {
-        // Check if a skill is the Overall skill without using the deprecated constant
-        return skill.getName().equals("Overall");
-    }
-
     private void rebuildSkillPanels()
     {
         // Clear existing skill panels
@@ -381,7 +376,6 @@ class TimeToMaxPanel extends PluginPanel
         List<Skill> unmaxedSkills = new ArrayList<>();
         for (Skill skill : Skill.values())
         {
-            if (isOverallSkill(skill)) continue;
 
             int currentXp = client.getSkillExperience(skill);
             if (currentXp < XpCalculator.MAX_XP)
@@ -412,8 +406,9 @@ class TimeToMaxPanel extends PluginPanel
         
         for (Skill skill : unmaxedSkills) {
             int xpGained = skillsTracker.getSessionXpGained(skill);
-            int currentXp = client.getSkillExperience(skill);
-            int requiredXp = XpCalculator.getRequiredXpPerInterval(currentXp, targetDate, config.trackingInterval());
+            // Use the baseline XP value for calculating required XP, not current XP
+            int baselineXp = skillsTracker.getBaselineXp(skill);
+            int requiredXp = XpCalculator.getRequiredXpPerInterval(baselineXp, targetDate, config.trackingInterval());
             
             if (xpGained >= requiredXp && requiredXp > 0) {
                 completedSkills.add(skill);
