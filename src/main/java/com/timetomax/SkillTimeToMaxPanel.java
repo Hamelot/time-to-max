@@ -31,8 +31,7 @@ class SkillTimeToMaxPanel extends JPanel
 
 	private final JProgressBar progressBar = new JProgressBar();
 	private final JLabel xpGained = new JLabel();
-	private final JLabel xpHour = new JLabel();
-	private final JLabel xpLeft = new JLabel();
+	private final JLabel xpRemaining = new JLabel();
 	private final Skill skill;
 	private final Client client;
 	private final TimeToMaxConfig config;
@@ -63,7 +62,7 @@ class SkillTimeToMaxPanel extends JPanel
 		// Create panel for skill information
 		final JPanel skillPanel = new JPanel();
 		skillPanel.setBorder(new EmptyBorder(0, 5, 0, 5));
-		skillPanel.setLayout(new GridLayout(4, 1));
+		skillPanel.setLayout(new GridLayout(3, 1));
 		skillPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 
 		// Skill name
@@ -75,8 +74,7 @@ class SkillTimeToMaxPanel extends JPanel
 		// Add labels to panel
 		skillPanel.add(skillName);
 		skillPanel.add(xpGained);
-		skillPanel.add(xpLeft);
-		skillPanel.add(xpHour);
+		skillPanel.add(xpRemaining);
 
 		// Add progress bar
 		progressBar.setStringPainted(true);
@@ -129,29 +127,16 @@ class SkillTimeToMaxPanel extends JPanel
 		// Set label values
 		xpGained.setText(String.format("%,d/%,d XP gained", xpGainedSession, requiredXp));
 
-		if (xpToMax <= 0)
-		{
-			xpLeft.setText("Level 99");
-			xpLeft.setForeground(COMPLETED_COLOR);
-		}
-		else
-		{
-			// Show remaining XP for target instead of XP to next level
-			int remainingXpForTarget = Math.max(0, requiredXp - xpGainedSession);
-			xpLeft.setText(String.format("%,d XP remaining for %s", remainingXpForTarget, interval.toString().toLowerCase()));
-			xpLeft.setForeground(Color.WHITE);
-		}
-
 		// Set goal completion message
 		if (xpGainedSession >= requiredXp && requiredXp > 0)
 		{
-			xpHour.setText("Complete!");
-			xpHour.setForeground(COMPLETED_COLOR);
+			xpRemaining.setText("Complete!");
+			xpRemaining.setForeground(COMPLETED_COLOR);
 		}
 		else
 		{
-			xpHour.setText(String.format("Need %,d more XP", Math.max(0, requiredXp - xpGainedSession)));
-			xpHour.setForeground(UNCOMPLETED_COLOR);
+			xpRemaining.setText(String.format("%,d XP remaining", Math.max(0, requiredXp - xpGainedSession)));
+			xpRemaining.setForeground(UNCOMPLETED_COLOR);
 		}
 
 		// Update progress bar
