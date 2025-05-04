@@ -63,27 +63,54 @@ public class SkillsTracker implements Serializable
 		this.configManager = configManager;
 		this.client = client;
 		this.username = username;
-		this.configKey = CONFIG_GROUP + "." + username + ".snapshots";
-		this.baselineKey = CONFIG_GROUP + "." + username + ".baseline";
-		this.lastResetKey = CONFIG_GROUP + "." + username + ".lastreset";
-		this.gson = gson; // Store the injected Gson
+		this.configKey = "snapshots";
+		this.baselineKey = "baseline";
+		this.lastResetKey = "lastreset";
+		this.gson = gson;
+
+		String profileKey = configManager.getRSProfileKey();
+		log.info("[SkillsTracker] Initializing for RS profile: {}", profileKey);
 
 		snapshots = new CopyOnWriteArrayList<>();
 
-		// First try to load from file (most reliable)
 		if (!loadBaselineFromFile())
 		{
-			// If file loading failed, try ConfigManager
+			log.info("[SkillsTracker] No baseline found in file for profile: {}", profileKey);
 			loadBaseline();
+		}
+		else
+		{
+			log.info("[SkillsTracker] Baseline loaded from file for profile: {}", profileKey);
+		}
+
+		if (!baselineSet && client != null)
+		{
+			log.info("[SkillsTracker] No baseline found in config for profile: {}, setting new baseline", profileKey);
+			for (Skill skill : Skill.values())
+			{
+				try
+				{
+					int xp = client.getSkillExperience(skill);
+					baselineXp.put(skill, xp);
+				}
+				catch (Exception e)
+				{
+					log.warn("Failed to set initial baseline XP for skill: {}", skill.getName(), e);
+				}
+			}
+			baselineSet = true;
+			this.lastResetTimeStr = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+			saveBaseline();
+			saveLastResetTime();
+			saveBaselineToFile();
+			log.info("[SkillsTracker] Set new baseline and last reset time for RS profile: {}", profileKey);
 		}
 
 		loadSnapshots();
 		loadLastResetTime();
 
-		// Initialize the current period tracking
 		updateCurrentPeriodKey();
 
-		// For testing environment: Store both in the ConfigManager and in a file
 		if (baselineSet && !baselineXp.isEmpty())
 		{
 			storeDirectBaseline();
@@ -98,7 +125,9 @@ public class SkillsTracker implements Serializable
 		{
 			BASELINE_STORAGE_DIR.mkdirs();
 		}
-		return new File(BASELINE_STORAGE_DIR, username + "-baseline.json");
+		// Use RS profile key (username + world type) for partitioned file storage
+		String profileKey = configManager.getRSProfileKey();
+		return new File(BASELINE_STORAGE_DIR, profileKey + "-baseline.json");
 	}
 
 	// Save baseline data to a file for maximum persistence
@@ -199,7 +228,9 @@ public class SkillsTracker implements Serializable
 		{
 			BASELINE_STORAGE_DIR.mkdirs();
 		}
-		return new File(BASELINE_STORAGE_DIR, username + "-snapshot.json");
+		// Use RS profile key (username + world type) for partitioned file storage
+		String profileKey = configManager.getRSProfileKey();
+		return new File(BASELINE_STORAGE_DIR, profileKey + "-snapshot.json");
 	}
 
 	// Save current snapshot to file
@@ -415,49 +446,55 @@ public class SkillsTracker implements Serializable
 
 		// Parse the last reset time
 		LocalDateTime lastResetTime;
-		try {
+		try
+		{
 			lastResetTime = LocalDateTime.parse(lastResetTimeStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-		} catch (Exception e) {
+		}
+		catch (Exception e)
+		{
 			log.error("Failed to parse last reset time", e);
 			return true; // If we can't parse the time, reset now
 		}
 
 		// Get current date (respecting any override for testing)
 		LocalDate currentDate = getCurrentDate();
-		
+
 		// Get the date part of the last reset
 		LocalDate lastResetDate = lastResetTime.toLocalDate();
-		
+
 		// Determine if we should reset based on interval type
 		switch (interval)
 		{
 			case DAY:
 				// Reset if the current date is different from the last reset date
-				if (!currentDate.equals(lastResetDate)) {
+				if (!currentDate.equals(lastResetDate))
+				{
 					log.debug("Day changed from {} to {}, resetting baseline", lastResetDate, currentDate);
 					currentPeriodKey = currentDate.toString();
 					return true;
 				}
 				break;
-				
+
 			case WEEK:
 				// Get start of current week and last reset week
 				LocalDate currentWeekStart = currentDate.minusDays(currentDate.getDayOfWeek().getValue() - 1);
 				LocalDate lastWeekStart = lastResetDate.minusDays(lastResetDate.getDayOfWeek().getValue() - 1);
-				
+
 				// Reset if the week has changed
-				if (!currentWeekStart.equals(lastWeekStart)) {
+				if (!currentWeekStart.equals(lastWeekStart))
+				{
 					log.debug("Week changed from {} to {}, resetting baseline", lastWeekStart, currentWeekStart);
 					currentPeriodKey = "WEEK-" + currentWeekStart.toString();
 					return true;
 				}
 				break;
-				
+
 			case MONTH:
 				// Reset if the month or year has changed
-				if (currentDate.getYear() != lastResetDate.getYear() || 
-					currentDate.getMonthValue() != lastResetDate.getMonthValue()) {
-					log.debug("Month changed from {}-{} to {}-{}, resetting baseline", 
+				if (currentDate.getYear() != lastResetDate.getYear() ||
+					currentDate.getMonthValue() != lastResetDate.getMonthValue())
+				{
+					log.debug("Month changed from {}-{} to {}-{}, resetting baseline",
 						lastResetDate.getYear(), lastResetDate.getMonthValue(),
 						currentDate.getYear(), currentDate.getMonthValue());
 					currentPeriodKey = "MONTH-" + currentDate.getYear() + "-" + currentDate.getMonthValue();
@@ -465,7 +502,7 @@ public class SkillsTracker implements Serializable
 				}
 				break;
 		}
-		
+
 		// No reset needed
 		return false;
 	}
@@ -474,16 +511,12 @@ public class SkillsTracker implements Serializable
 	{
 		try
 		{
-			// Save the baseline XP map directly
-			configManager.setConfiguration("timetomax", baselineKey, baselineXp);
-
-			// Also save the reset time as string
+			String profileKey = configManager.getRSProfileKey();
+			log.info("[SkillsTracker] Saving baseline for RS profile: {}", profileKey);
+			configManager.setRSProfileConfiguration(CONFIG_GROUP, baselineKey, baselineXp);
 			this.lastResetTimeStr = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
 			saveLastResetTime();
-
-			// Also set a global flag that baseline exists
 			configManager.setConfiguration(CONFIG_GROUP, BASELINE_PERSIST_KEY, true);
-
 			log.debug("Saved baseline XP values and reset time");
 		}
 		catch (Exception e)
@@ -496,41 +529,42 @@ public class SkillsTracker implements Serializable
 	{
 		try
 		{
-			// Load the configuration directly using ConfigManager's type handling
+			String profileKey = configManager.getRSProfileKey();
+			log.info("[SkillsTracker] Loading baseline from config for RS profile: {}", profileKey);
 			baselineXp.clear();
-			Object data = configManager.getConfiguration("timetomax", baselineKey);
-
-			if (data != null && data instanceof Map)
+			Type mapType = new TypeToken<Map<String, Integer>>()
 			{
-				Map<?, ?> configMap = (Map<?, ?>) data;
-				for (Map.Entry<?, ?> entry : configMap.entrySet())
+			}.getType();
+			Map<String, Integer> data = configManager.getRSProfileConfiguration(CONFIG_GROUP, baselineKey, mapType);
+
+			if (data != null && !data.isEmpty())
+			{
+				for (Map.Entry<String, Integer> entry : data.entrySet())
 				{
-					if (entry.getKey() instanceof String && entry.getValue() instanceof Number)
+					try
 					{
-						try
-						{
-							Skill skill = Skill.valueOf((String) entry.getKey());
-							baselineXp.put(skill, ((Number) entry.getValue()).intValue());
-						}
-						catch (IllegalArgumentException e)
-						{
-							// Skip invalid skills
-							log.debug("Skipping invalid skill name in config: {}", entry.getKey());
-						}
+						Skill skill = Skill.valueOf(entry.getKey());
+						baselineXp.put(skill, entry.getValue());
+					}
+					catch (IllegalArgumentException e)
+					{
+						log.debug("Skipping invalid skill name in config: {}", entry.getKey());
 					}
 				}
-
 				if (!baselineXp.isEmpty())
 				{
 					baselineSet = true;
-					log.debug("Loaded baseline XP values from config: {} skills", baselineXp.size());
+					log.info("[SkillsTracker] Loaded baseline XP values from config for profile: {} ({} skills)", profileKey, baselineXp.size());
 				}
+			}
+			else
+			{
+				log.info("[SkillsTracker] No baseline found in config for profile: {}", profileKey);
 			}
 		}
 		catch (Exception e)
 		{
 			log.error("Failed to load baseline XP values from config", e);
-			// Reset baseline if failed to load
 			baselineXp.clear();
 			baselineSet = false;
 		}
@@ -540,7 +574,7 @@ public class SkillsTracker implements Serializable
 	{
 		if (lastResetTimeStr != null)
 		{
-			configManager.setConfiguration("timetomax", lastResetKey, lastResetTimeStr);
+			configManager.setRSProfileConfiguration(CONFIG_GROUP, lastResetKey, lastResetTimeStr);
 		}
 	}
 
@@ -548,7 +582,7 @@ public class SkillsTracker implements Serializable
 	{
 		try
 		{
-			lastResetTimeStr = configManager.getConfiguration("timetomax", lastResetKey, String.class);
+			lastResetTimeStr = configManager.getRSProfileConfiguration(CONFIG_GROUP, lastResetKey, String.class);
 			if (lastResetTimeStr != null && !lastResetTimeStr.isEmpty())
 			{
 				log.debug("Loaded last reset time: {}", lastResetTimeStr);
@@ -595,13 +629,12 @@ public class SkillsTracker implements Serializable
 
 	private void saveSnapshots()
 	{
-		// Keep only the necessary snapshots (latest + one for each interval)
 		pruneSnapshots();
-
 		try
 		{
-			// Store snapshots directly
-			configManager.setConfiguration("timetomax", configKey, snapshots);
+			String profileKey = configManager.getRSProfileKey();
+			log.info("[SkillsTracker] Saving {} snapshots for RS profile: {}", snapshots.size(), profileKey);
+			configManager.setRSProfileConfiguration(CONFIG_GROUP, configKey, snapshots);
 			log.debug("Saved {} snapshots to config", snapshots.size());
 		}
 		catch (Exception e)
@@ -614,7 +647,8 @@ public class SkillsTracker implements Serializable
 	{
 		try
 		{
-			// First try to load from file (most reliable)
+			String profileKey = configManager.getRSProfileKey();
+			log.info("[SkillsTracker] Loading snapshots for RS profile: {}", profileKey);
 			SkillsSnapshot fileSnapshot = loadSnapshotFromFile();
 			if (fileSnapshot != null)
 			{
@@ -623,17 +657,18 @@ public class SkillsTracker implements Serializable
 				log.debug("Loaded snapshot from file");
 				return;
 			}
-
-			// Otherwise try ConfigManager
-			Object data = configManager.getConfiguration("timetomax", configKey);
-			if (data instanceof List)
+			Type listType = new TypeToken<List<SkillsSnapshot>>()
 			{
-				List<?> loadedSnapshots = (List<?>) data;
-				if (!loadedSnapshots.isEmpty() && loadedSnapshots.get(0) instanceof SkillsSnapshot)
-				{
-					snapshots.addAll((List<SkillsSnapshot>) loadedSnapshots);
-					log.debug("Loaded {} snapshots from config", snapshots.size());
-				}
+			}.getType();
+			List<SkillsSnapshot> loadedSnapshots = configManager.getRSProfileConfiguration(CONFIG_GROUP, configKey, listType);
+			if (loadedSnapshots != null && !loadedSnapshots.isEmpty())
+			{
+				snapshots.addAll(loadedSnapshots);
+				log.info("[SkillsTracker] Loaded {} snapshots from config for profile: {}", loadedSnapshots.size(), profileKey);
+			}
+			else
+			{
+				log.info("[SkillsTracker] No snapshots found in config for profile: {}", profileKey);
 			}
 		}
 		catch (Exception e)

@@ -44,10 +44,6 @@ import java.util.Set;
 )
 public class TimeToMaxPlugin extends Plugin
 {
-	// Static field to preserve baseline data between plugin toggle cycles
-	private static SkillsTracker persistentTracker = null;
-	private static boolean hadPreviousSession = false;
-
 	// Config keys for persistent storage between client restarts
 	private static final String ACTIVE_SESSION_KEY = "activeSession";
 	private static final String SESSION_USERNAME_KEY = "sessionUsername";
@@ -104,6 +100,9 @@ public class TimeToMaxPlugin extends Plugin
 	// Track which skills have already triggered a notification for this session
 	private final Set<Skill> notifiedSkills = new HashSet<>();
 
+	// Add a flag to ensure the welcome message is only sent once per login session
+	private boolean sentWelcomeMessage = false;
+
 	@Override
 	protected void startUp() throws Exception
 	{
@@ -144,33 +143,10 @@ public class TimeToMaxPlugin extends Plugin
 		notifiedSkills.clear();
 		lastSkillXp.clear();
 		resetXpHintShown = false; // Reset the hint flag on startup
+		sentWelcomeMessage = false;
 
-		// First, check if we have a tracker from plugin toggling
-		if (persistentTracker != null)
-		{
-			log.info("Restoring previous session data from memory");
-			skillsTracker = persistentTracker;
-			hadPreviousSession = true;
-
-			// Update the panel with the restored tracker
-			if (panel != null)
-			{
-				panel.setSkillsTracker(skillsTracker);
-			}
-		}
-		// If no in-memory tracker, check for saved session data in config
-		else
-		{
-			boolean hasActiveSession = Boolean.TRUE.equals(configManager.getConfiguration("timetomax", ACTIVE_SESSION_KEY, Boolean.class));
-			String savedUsername = configManager.getConfiguration("timetomax", SESSION_USERNAME_KEY, String.class);
-
-			if (hasActiveSession && savedUsername != null && !savedUsername.isEmpty())
-			{
-				log.info("Found saved session data for user: {}", savedUsername);
-				// We'll restore this once the player logs in
-				hadPreviousSession = true;
-			}
-		}
+		// Always show empty panel until login
+		panel.showNoData();
 
 		// If the client is already logged in, initialize the plugin as if just logged in
 		if (client.getGameState() == GameState.LOGGED_IN)
@@ -202,7 +178,6 @@ public class TimeToMaxPlugin extends Plugin
 						{
 							// Force a refresh of snapshot data with current XP values
 							skillsTracker.forceSnapshotRefresh();
-							hadPreviousSession = true;
 						}
 						else
 						{
@@ -213,7 +188,6 @@ public class TimeToMaxPlugin extends Plugin
 							if (skillsTracker.hasValidBaselineData())
 							{
 								skillsTracker.forceSnapshotRefresh();
-								hadPreviousSession = true;
 							}
 						}
 					}
@@ -234,7 +208,7 @@ public class TimeToMaxPlugin extends Plugin
 					}
 
 					// If we've restored a previous session, we don't need to capture initial values
-					if (!hadPreviousSession)
+					if (!hasActiveSession)
 					{
 						// Capture initial XP values
 						captureInitialXpValues();
@@ -281,13 +255,7 @@ public class TimeToMaxPlugin extends Plugin
 	{
 		log.info("Time to Max plugin stopped!");
 
-		// Store the tracker in the static field for persistence between toggles
-		if (skillsTracker != null)
-		{
-			log.debug("Preserving session data for next startup");
-			persistentTracker = skillsTracker;
-		}
-
+		// No static persistence, just clear state
 		lastSkillXp.clear();
 		activeSkills.clear();
 		notifiedSkills.clear();
@@ -306,6 +274,7 @@ public class TimeToMaxPlugin extends Plugin
 			loginTicks = 0;
 			initialXpSet = false;
 			activeSkills.clear();
+			sentWelcomeMessage = false;
 		}
 		else if (gameStateChanged.getGameState() == GameState.LOGIN_SCREEN)
 		{
@@ -314,6 +283,7 @@ public class TimeToMaxPlugin extends Plugin
 			waitingForPlayerName = false;
 			activeSkills.clear();
 			notifiedSkills.clear();
+			sentWelcomeMessage = false;
 
 			if (panel != null)
 			{
@@ -397,44 +367,48 @@ public class TimeToMaxPlugin extends Plugin
 			Player player = client.getLocalPlayer();
 			if (player != null && player.getName() != null && !player.getName().isEmpty())
 			{
-				// We have a valid player name, initialize the tracker
 				String playerName = player.getName();
-				log.debug("Player name available: {}", playerName);
+				log.debug("Player name available: {} (recreating SkillsTracker for RS profile)", playerName);
 
-				if (skillsTracker == null)
+				// Always create a new SkillsTracker for the current RS profile
+				skillsTracker = new SkillsTracker(configManager, client, playerName, gson);
+
+				boolean hasBaseline = skillsTracker.hasValidBaselineData();
+				boolean needsReset = hasBaseline && skillsTracker.shouldResetBaseline(config.trackingInterval());
+
+				if (!hasBaseline)
 				{
-					skillsTracker = new SkillsTracker(configManager, client, playerName, gson);
+					// No baseline: set a new one and set last reset time
+					log.info("No baseline found for profile, setting new baseline");
+					skillsTracker.resetBaseline(client);
+				}
+				else if (needsReset)
+				{
+					// Baseline exists but needs reset due to date change
+					log.info("Baseline exists but date changed, resetting baseline");
+					skillsTracker.resetBaseline(client);
+				}
+				else
+				{
+					// Baseline exists and is current, just refresh snapshot
+					skillsTracker.forceSnapshotRefresh();
+				}
 
-					// Check if we need to restore baseline data from previous session
-					boolean hasPreviousBaselineData = skillsTracker.hasValidBaselineData();
+				// Set the current period key based on tracking interval
+				skillsTracker.updateCurrentPeriodKey(config.trackingInterval());
 
-					// If no baseline data found, try to load from direct storage
-					if (!hasPreviousBaselineData)
-					{
-						skillsTracker.tryLoadDirectBaseline();
-						hasPreviousBaselineData = skillsTracker.hasValidBaselineData();
-					}
+				// Set the tracker in the panel when it's ready
+				if (panel != null)
+				{
+					panel.setSkillsTracker(skillsTracker);
+				}
 
-					// Set the current period key based on tracking interval
-					skillsTracker.updateCurrentPeriodKey(config.trackingInterval());
-
-					// Set the tracker in the panel when it's ready
-					if (panel != null)
-					{
-						panel.setSkillsTracker(skillsTracker);
-					}
-
-					// If we're restored from a previous session, force a snapshot refresh
-					if (hasPreviousBaselineData)
-					{
-						log.info("Found baseline data on login, refreshing snapshot");
-						skillsTracker.forceSnapshotRefresh();
-						hadPreviousSession = true;
-					}
-
-					// Regular welcome message
+				// Regular welcome message (only once per login)
+				if (!sentWelcomeMessage)
+				{
 					client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
 						"Time to Max: Tracking XP over " + config.trackingInterval() + " intervals.", null);
+					sentWelcomeMessage = true;
 				}
 
 				// Wait a few more ticks to ensure skills are loaded before capturing baseline
@@ -455,7 +429,6 @@ public class TimeToMaxPlugin extends Plugin
 			}
 			else if (loginTicks > 20)
 			{
-				// If we've waited 20 ticks and still don't have a name, log a warning
 				log.warn("Unable to get player name after {} ticks", loginTicks);
 				waitingForPlayerName = false;
 			}
