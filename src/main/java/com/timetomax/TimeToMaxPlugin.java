@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ScheduledExecutorService;
 
 @Slf4j
 @PluginDescriptor(
@@ -76,6 +77,9 @@ public class TimeToMaxPlugin extends Plugin
 
 	@Inject
 	private Gson gson;
+
+	@Inject
+	private ScheduledExecutorService executor;
 
 	private TimeToMaxPanel panel;
 	private NavigationButton navButton;
@@ -171,7 +175,7 @@ public class TimeToMaxPlugin extends Plugin
 						savedUsername.equals(playerName))
 					{
 						log.info("Restoring session data for {}", playerName);
-						skillsTracker = new SkillsTracker(configManager, client, playerName, gson);
+						skillsTracker = new SkillsTracker(configManager, client, playerName, gson, executor);
 
 						// Ensure we have valid baseline data
 						if (skillsTracker.hasValidBaselineData())
@@ -194,7 +198,7 @@ public class TimeToMaxPlugin extends Plugin
 					// Otherwise create a new tracker if needed
 					else if (skillsTracker == null)
 					{
-						skillsTracker = new SkillsTracker(configManager, client, playerName, gson);
+						skillsTracker = new SkillsTracker(configManager, client, playerName, gson, executor);
 
 						// Save the session info for persistence
 						configManager.setConfiguration("timetomax", ACTIVE_SESSION_KEY, true);
@@ -274,7 +278,6 @@ public class TimeToMaxPlugin extends Plugin
 			loginTicks = 0;
 			initialXpSet = false;
 			activeSkills.clear();
-			sentWelcomeMessage = false;
 		}
 		else if (gameStateChanged.getGameState() == GameState.LOGIN_SCREEN)
 		{
@@ -283,7 +286,6 @@ public class TimeToMaxPlugin extends Plugin
 			waitingForPlayerName = false;
 			activeSkills.clear();
 			notifiedSkills.clear();
-			sentWelcomeMessage = false;
 
 			if (panel != null)
 			{
@@ -371,7 +373,7 @@ public class TimeToMaxPlugin extends Plugin
 				log.debug("Player name available: {} (recreating SkillsTracker for RS profile)", playerName);
 
 				// Always create a new SkillsTracker for the current RS profile
-				skillsTracker = new SkillsTracker(configManager, client, playerName, gson);
+				skillsTracker = new SkillsTracker(configManager, client, playerName, gson, executor);
 
 				boolean hasBaseline = skillsTracker.hasValidBaselineData();
 				boolean needsReset = hasBaseline && skillsTracker.shouldResetBaseline(config.trackingInterval());

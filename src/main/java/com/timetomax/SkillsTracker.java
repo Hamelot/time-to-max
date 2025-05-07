@@ -21,6 +21,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 @Slf4j
 public class SkillsTracker implements Serializable
@@ -34,6 +37,7 @@ public class SkillsTracker implements Serializable
 	private final String lastResetKey;
 	private final String username;
 	private final Gson gson; // Use injected Gson
+	private final ScheduledExecutorService executor;
 
 	// Store baseline XP values from when tracking started in the current session
 	private final Map<Skill, Integer> baselineXp = new EnumMap<>(Skill.class);
@@ -58,7 +62,7 @@ public class SkillsTracker implements Serializable
 	// For testing day change logic
 	private static LocalDate overrideCurrentDate = null;
 
-	public SkillsTracker(ConfigManager configManager, Client client, String username, Gson gson)
+	public SkillsTracker(ConfigManager configManager, Client client, String username, Gson gson, ScheduledExecutorService executor)
 	{
 		this.configManager = configManager;
 		this.client = client;
@@ -67,13 +71,21 @@ public class SkillsTracker implements Serializable
 		this.baselineKey = "baseline";
 		this.lastResetKey = "lastreset";
 		this.gson = gson;
+		this.executor = executor;
 
 		String profileKey = configManager.getRSProfileKey();
 		log.info("[SkillsTracker] Initializing for RS profile: {}", profileKey);
 
 		snapshots = new CopyOnWriteArrayList<>();
 
-		if (!loadBaselineFromFile())
+		boolean baselineLoaded = false;
+		try {
+			Future<Boolean> baselineFuture = executor.submit(this::loadBaselineFromFile);
+			baselineLoaded = baselineFuture.get();
+		} catch (InterruptedException | ExecutionException e) {
+			log.error("Error loading baseline from file async", e);
+		}
+		if (!baselineLoaded)
 		{
 			log.info("[SkillsTracker] No baseline found in file for profile: {}", profileKey);
 			loadBaseline();
@@ -106,7 +118,15 @@ public class SkillsTracker implements Serializable
 			log.info("[SkillsTracker] Set new baseline and last reset time for RS profile: {}", profileKey);
 		}
 
-		loadSnapshots();
+		try {
+			Future<Void> snapshotFuture = executor.submit(() -> {
+				loadSnapshots();
+				return null;
+			});
+			snapshotFuture.get();
+		} catch (InterruptedException | ExecutionException e) {
+			log.error("Error loading snapshots from file async", e);
+		}
 		loadLastResetTime();
 
 		updateCurrentPeriodKey();
@@ -133,32 +153,34 @@ public class SkillsTracker implements Serializable
 	// Save baseline data to a file for maximum persistence
 	private void saveBaselineToFile()
 	{
-		try
-		{
-			File file = getBaselineFile();
-			Map<String, Integer> exportData = new HashMap<>();
-
-			// Convert Skill enum keys to strings for JSON storage
-			for (Map.Entry<Skill, Integer> entry : baselineXp.entrySet())
+		executor.execute(() -> {
+			try
 			{
-				exportData.put(entry.getKey().name(), entry.getValue());
+				File file = getBaselineFile();
+				Map<String, Integer> exportData = new HashMap<>();
+
+				// Convert Skill enum keys to strings for JSON storage
+				for (Map.Entry<Skill, Integer> entry : baselineXp.entrySet())
+				{
+					exportData.put(entry.getKey().name(), entry.getValue());
+				}
+
+				// Add timestamp for verification
+				exportData.put("_timestamp", (int) (System.currentTimeMillis() / 1000));
+
+				try (FileWriter writer = new FileWriter(file))
+				{
+					gson.toJson(exportData, writer);
+				}
+
+				log.debug("Saved baseline data to file: {}", file.getAbsolutePath());
+				return;
 			}
-
-			// Add timestamp for verification
-			exportData.put("_timestamp", (int) (System.currentTimeMillis() / 1000));
-
-			try (FileWriter writer = new FileWriter(file))
+			catch (Exception e)
 			{
-				gson.toJson(exportData, writer);
+				log.error("Failed to save baseline data to file", e);
 			}
-
-			log.debug("Saved baseline data to file: {}", file.getAbsolutePath());
-			return;
-		}
-		catch (Exception e)
-		{
-			log.error("Failed to save baseline data to file", e);
-		}
+		});
 	}
 
 	// Load baseline data from file
@@ -236,21 +258,23 @@ public class SkillsTracker implements Serializable
 	// Save current snapshot to file
 	private void saveSnapshotToFile(SkillsSnapshot snapshot)
 	{
-		try
-		{
-			File file = getSnapshotFile();
-
-			try (FileWriter writer = new FileWriter(file))
+		executor.execute(() -> {
+			try
 			{
-				gson.toJson(snapshot, writer);
-			}
+				File file = getSnapshotFile();
 
-			log.debug("Saved snapshot to file: {}", file.getAbsolutePath());
-		}
-		catch (Exception e)
-		{
-			log.error("Failed to save snapshot to file", e);
-		}
+				try (FileWriter writer = new FileWriter(file))
+				{
+					gson.toJson(snapshot, writer);
+				}
+
+				log.debug("Saved snapshot to file: {}", file.getAbsolutePath());
+			}
+			catch (Exception e)
+			{
+				log.error("Failed to save snapshot to file", e);
+			}
+		});
 	}
 
 	// Load snapshot from file
