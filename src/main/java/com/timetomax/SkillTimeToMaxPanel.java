@@ -36,18 +36,21 @@ class SkillTimeToMaxPanel extends JPanel
 	private final Client client;
 	private final TimeToMaxConfig config;
 	private final SkillsTracker skillsTracker;
+	private final java.util.concurrent.ScheduledExecutorService executor;
 
 	SkillTimeToMaxPanel(
 		Skill skill,
 		Client client,
 		SkillIconManager iconManager,
 		TimeToMaxConfig config,
-		SkillsTracker skillsTracker)
+		SkillsTracker skillsTracker,
+		java.util.concurrent.ScheduledExecutorService executor)
 	{
 		this.skill = skill;
 		this.client = client;
 		this.config = config;
 		this.skillsTracker = skillsTracker;
+		this.executor = executor;
 
 		setBorder(new CompoundBorder(PANEL_BORDER, new EmptyBorder(5, 0, 5, 0)));
 		setLayout(new BorderLayout());
@@ -98,9 +101,8 @@ class SkillTimeToMaxPanel extends JPanel
 
 	private void updateSkillData()
 	{
-		// Use the executor to avoid blocking the UI thread
-		java.util.concurrent.ExecutorService asyncExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
-		asyncExecutor.submit(() -> {
+		// Use the shared executor to avoid blocking the UI thread
+		executor.submit(() -> {
 			try
 			{
 				// Get baseline XP (the XP at the start of the tracking period)
@@ -170,9 +172,6 @@ class SkillTimeToMaxPanel extends JPanel
 				log.error("Error updating skill data", e);
 			}
 		});
-
-		// Shutdown the executor to prevent resource leaks
-		asyncExecutor.shutdown();
 	}
 
 	/**
@@ -181,9 +180,8 @@ class SkillTimeToMaxPanel extends JPanel
 	 */
 	public void updateData()
 	{
-		// Use the executor to avoid blocking the UI thread
-		java.util.concurrent.ExecutorService asyncExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
-		asyncExecutor.submit(() -> {
+		// Use the shared executor to avoid blocking the UI thread
+		executor.submit(() -> {
 			try
 			{
 				// Get baseline XP (the XP at the start of the tracking period)
@@ -259,12 +257,18 @@ class SkillTimeToMaxPanel extends JPanel
 			}
 			catch (Exception e)
 			{
-				// Log any errors that occur during the async operation
-				log.error("Error updating skill data for {}: {}", skill.getName(), e.getMessage());
+				// Log any errors that occur during the async operation				log.error("Error updating skill data for {}: {}", skill.getName(), e.getMessage());
 			}
 		});
+	}
 
-		// Shutdown the executor to prevent resource leaks
-		asyncExecutor.shutdown();
+	/**
+	 * Prepares this panel for shutdown by cleaning up any resources
+	 * This helps break potential circular references
+	 */
+	public void prepareForShutdown()
+	{
+		// Clean any references that might hold onto resources
+		// Currently just a hook for proper cleanup if needed in the future
 	}
 }

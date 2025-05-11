@@ -77,41 +77,47 @@ public class SkillsTracker implements Serializable
 
 		snapshots = new CopyOnWriteArrayList<>();
 
-		// Start loading baseline asynchronously
-		executor.submit(() -> {
-			boolean baselineLoaded = loadBaselineFromFile();
-			if (!baselineLoaded)
-			{
-				log.info("[SkillsTracker] No baseline found in file for profile: {}", profileKey);
-				loadBaseline();
-			}
-			else
-			{
-				log.info("[SkillsTracker] Baseline loaded from file for profile: {}", profileKey);
-			}
-		});
+		// Immediately try to load baseline from file, synchronously first
+		// This prevents potential race condition with the baselineSet check below
+		boolean baselineLoaded = loadBaselineFromFile();
 
-		if (!baselineSet && client != null)
+		if (!baselineLoaded)
 		{
-			log.info("[SkillsTracker] No baseline found in config for profile: {}, setting new baseline", profileKey);
-			for (Skill skill : Skill.values())
+			// Try to load from config first - also synchronously
+			loadBaseline();
+
+			// If still no baseline, set one from current XP values
+			if (!baselineSet && client != null)
 			{
-				try
+				log.info("[SkillsTracker] No baseline found in file/config for profile: {}, setting new baseline", profileKey);
+				for (Skill skill : Skill.values())
 				{
-					int xp = client.getSkillExperience(skill);
-					baselineXp.put(skill, xp);
+					try
+					{
+						int xp = client.getSkillExperience(skill);
+						baselineXp.put(skill, xp);
+					}
+					catch (Exception e)
+					{
+						log.warn("Failed to set initial baseline XP for skill: {}", skill.getName(), e);
+					}
 				}
-				catch (Exception e)
-				{
-					log.warn("Failed to set initial baseline XP for skill: {}", skill.getName(), e);
-				}
+				baselineSet = true;
+				this.lastResetTimeStr = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+				saveBaseline();
+				saveLastResetTime();
+
+				// Save baseline to file asynchronously
+				executor.submit(() -> {
+					saveBaselineToFile();
+				});
+
+				log.info("[SkillsTracker] Set new baseline and last reset time for RS profile: {}", profileKey);
 			}
-			baselineSet = true;
-			this.lastResetTimeStr = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-			saveBaseline();
-			saveLastResetTime();
-			saveBaselineToFile();
-			log.info("[SkillsTracker] Set new baseline and last reset time for RS profile: {}", profileKey);
+		}
+		else
+		{
+			log.info("[SkillsTracker] Baseline loaded from file for profile: {}", profileKey);
 		}
 
 		// Load snapshots asynchronously
@@ -551,9 +557,20 @@ public class SkillsTracker implements Serializable
 	 */
 	public boolean shouldResetBaseline(TrackingInterval interval)
 	{
+		// Make sure we have valid baseline data first
+		if (!hasValidBaselineData())
+		{
+			log.debug("No valid baseline data to check for reset");
+			return false; // Don't reset if we don't have baseline data - we'll create it separately
+		}
+
 		if (lastResetTimeStr == null)
 		{
-			return true; // Never reset before, so we should reset now
+			// If we have valid baseline data but no reset time, add one now without resetting
+			this.lastResetTimeStr = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+			saveLastResetTime();
+			log.debug("No reset time found but baseline exists, adding reset time without resetting");
+			return false;
 		}
 
 		// Parse the last reset time
@@ -565,7 +582,10 @@ public class SkillsTracker implements Serializable
 		catch (Exception e)
 		{
 			log.error("Failed to parse last reset time", e);
-			return true; // If we can't parse the time, reset now
+			// If we can't parse the time but have baseline data, just update the timestamp
+			this.lastResetTimeStr = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+			saveLastResetTime();
+			return false;
 		}
 
 		// Get current date (respecting any override for testing)
@@ -1028,5 +1048,36 @@ public class SkillsTracker implements Serializable
 	public static LocalDate getCurrentDate()
 	{
 		return overrideCurrentDate != null ? overrideCurrentDate : LocalDate.now();
+	}
+
+	/**
+	 * Prepares this tracker for shutdown
+	 * Called when the plugin is being shutdown to ensure we don't have lingering tasks
+	 */
+	public void prepareForShutdown()
+	{
+		// Note: We don't shut down the executor itself as it's injected and managed by RuneLite
+
+		// Ensure any pending snapshot updates are saved before shutdown
+		if (!snapshots.isEmpty())
+		{
+			// Force one final save of the snapshot data to ensure nothing is lost
+			try
+			{
+				saveSnapshots();
+				if (snapshots.size() > 0)
+				{
+					saveSnapshotToFile(snapshots.get(snapshots.size() - 1));
+				}
+				log.debug("Final snapshot state saved during shutdown");
+			}
+			catch (Exception e)
+			{
+				log.error("Failed to save final snapshot state during shutdown", e);
+			}
+		}
+
+		// We intentionally don't clear snapshots to ensure they can be properly
+		// loaded if the plugin is immediately restarted without reloading from persistence
 	}
 }
