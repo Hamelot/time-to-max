@@ -98,65 +98,173 @@ class SkillTimeToMaxPanel extends JPanel
 
 	private void updateSkillData()
 	{
-		// Current XP in the skill
-		int currentXp = client.getSkillExperience(skill);
+		// Use the executor to avoid blocking the UI thread
+		java.util.concurrent.ExecutorService asyncExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
+		asyncExecutor.submit(() -> {
+			try
+			{
+				// Get baseline XP (the XP at the start of the tracking period)
+				// Using the synchronous call is OK here since we're already in a background thread
+				int baselineXp = skillsTracker.getBaselineXp(skill);
 
-		// Get baseline XP (the XP at the start of the tracking period)
-		int baselineXp = skillsTracker.getBaselineXp(skill);
+				// Get target date
+				LocalDate targetDate;
+				try
+				{
+					targetDate = LocalDate.parse(config.targetDate());
+				}
+				catch (DateTimeParseException e)
+				{
+					targetDate = LocalDate.now().plusMonths(6);
+				}
 
-		// Get target date
-		LocalDate targetDate;
-		try
-		{
-			targetDate = LocalDate.parse(config.targetDate());
-		}
-		catch (DateTimeParseException e)
-		{
-			targetDate = LocalDate.now().plusMonths(6);
-		}
+				// Get session XP gain - using the synchronous call is OK since we're in a background thread
+				int xpGainedSession = skillsTracker.getSessionXpGained(skill);
 
-		// Get session XP gain
-		int xpGainedSession = skillsTracker.getSessionXpGained(skill);
+				// Get XP needed for this interval based on BASELINE XP, not current XP
+				// This ensures the target doesn't change as you gain XP
+				TrackingInterval interval = config.trackingInterval();
+				int requiredXp = XpCalculator.getRequiredXpPerInterval(baselineXp, targetDate, interval);
 
-		// Get XP needed for this interval based on BASELINE XP, not current XP
-		// This ensures the target doesn't change as you gain XP
-		TrackingInterval interval = config.trackingInterval();
-		int requiredXp = XpCalculator.getRequiredXpPerInterval(baselineXp, targetDate, interval);
-		int xpToMax = XpCalculator.MAX_XP - currentXp;
+				// Final values for the UI update lambda
+				final int finalXpGained = xpGainedSession;
+				final int finalRequiredXp = requiredXp;
+				final int finalProgressPercent = (requiredXp > 0) ?
+					(int) Math.min(100, (xpGainedSession * 100.0) / requiredXp) : 0;
 
-		// Set label values
-		xpGained.setText(String.format("%,d/%,d XP gained", xpGainedSession, requiredXp));
+				// Update the UI components on the EDT
+				javax.swing.SwingUtilities.invokeLater(() -> {
+					// Set label values
+					xpGained.setText(String.format("%,d/%,d XP gained", finalXpGained, finalRequiredXp));
 
-		// Set goal completion message
-		if (xpGainedSession >= requiredXp && requiredXp > 0)
-		{
-			xpRemaining.setText("Complete!");
-			xpRemaining.setForeground(COMPLETED_COLOR);
-		}
-		else
-		{
-			xpRemaining.setText(String.format("%,d XP remaining", Math.max(0, requiredXp - xpGainedSession)));
-			xpRemaining.setForeground(UNCOMPLETED_COLOR);
-		}
+					// Set goal completion message
+					if (finalXpGained >= finalRequiredXp && finalRequiredXp > 0)
+					{
+						xpRemaining.setText("Complete!");
+						xpRemaining.setForeground(COMPLETED_COLOR);
+					}
+					else
+					{
+						xpRemaining.setText(String.format("%,d XP remaining", Math.max(0, finalRequiredXp - finalXpGained)));
+						xpRemaining.setForeground(UNCOMPLETED_COLOR);
+					}
 
-		// Update progress bar
-		int progressPercent = 0;
-		if (requiredXp > 0)
-		{
-			progressPercent = (int) Math.min(100, (xpGainedSession * 100.0) / requiredXp);
-		}
+					// Update progress bar
+					progressBar.setValue(finalProgressPercent);
+					progressBar.setString(String.format("%d%%", finalProgressPercent));
 
-		progressBar.setValue(progressPercent);
-		progressBar.setString(String.format("%d%%", progressPercent));
+					// Colorize the progress bar and text based on completion
+					if (finalProgressPercent >= 100)
+					{
+						progressBar.setForeground(COMPLETED_COLOR);
+					}
+					else
+					{
+						progressBar.setForeground(ColorScheme.BRAND_ORANGE);
+					}
+				});
+			}
+			catch (Exception e)
+			{
+				// Log any errors that occur during the async operation
+				log.error("Error updating skill data", e);
+			}
+		});
 
-		// Colorize the progress bar and text based on completion
-		if (progressPercent >= 100)
-		{
-			progressBar.setForeground(COMPLETED_COLOR);
-		}
-		else
-		{
-			progressBar.setForeground(ColorScheme.BRAND_ORANGE);
-		}
+		// Shutdown the executor to prevent resource leaks
+		asyncExecutor.shutdown();
+	}
+
+	/**
+	 * Update the skill data without creating a new panel
+	 * This prevents flickering when rapidly gaining XP
+	 */
+	public void updateData()
+	{
+		// Use the executor to avoid blocking the UI thread
+		java.util.concurrent.ExecutorService asyncExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
+		asyncExecutor.submit(() -> {
+			try
+			{
+				// Get baseline XP (the XP at the start of the tracking period)
+				int baselineXp = skillsTracker.getBaselineXp(skill);
+				if (baselineXp <= 0)
+				{
+					// Skip update if we couldn't get valid baseline XP
+					log.debug("Skipping update for {} - no valid baseline XP", skill.getName());
+					return;
+				}
+
+				// Get target date
+				LocalDate targetDate;
+				try
+				{
+					targetDate = LocalDate.parse(config.targetDate());
+				}
+				catch (DateTimeParseException e)
+				{
+					targetDate = LocalDate.now().plusMonths(6);
+				}
+
+				// Get session XP gain
+				int xpGainedSession = skillsTracker.getSessionXpGained(skill);
+				if (xpGainedSession < 0)
+				{
+					// Never show negative XP (can happen if there's an issue with snapshot data)
+					log.debug("Correcting negative XP gain ({}) for {}", xpGainedSession, skill.getName());
+					xpGainedSession = 0;
+				}
+
+				// Get XP needed for this interval based on BASELINE XP, not current XP
+				TrackingInterval interval = config.trackingInterval();
+				int requiredXp = XpCalculator.getRequiredXpPerInterval(baselineXp, targetDate, interval);
+
+				// Final values for the UI update lambda
+				final int finalXpGained = xpGainedSession;
+				final int finalRequiredXp = requiredXp;
+				final int finalProgressPercent = (requiredXp > 0) ?
+					(int) Math.min(100, (xpGainedSession * 100.0) / requiredXp) : 0;
+
+				// Update the UI components on the EDT
+				javax.swing.SwingUtilities.invokeLater(() -> {
+					// Set label values
+					xpGained.setText(String.format("%,d/%,d XP gained", finalXpGained, finalRequiredXp));
+
+					// Set goal completion message
+					if (finalXpGained >= finalRequiredXp && finalRequiredXp > 0)
+					{
+						xpRemaining.setText("Complete!");
+						xpRemaining.setForeground(COMPLETED_COLOR);
+					}
+					else
+					{
+						xpRemaining.setText(String.format("%,d XP remaining", Math.max(0, finalRequiredXp - finalXpGained)));
+						xpRemaining.setForeground(UNCOMPLETED_COLOR);
+					}
+
+					// Update progress bar
+					progressBar.setValue(finalProgressPercent);
+					progressBar.setString(String.format("%d%%", finalProgressPercent));
+
+					// Colorize the progress bar based on completion
+					if (finalProgressPercent >= 100)
+					{
+						progressBar.setForeground(COMPLETED_COLOR);
+					}
+					else
+					{
+						progressBar.setForeground(ColorScheme.BRAND_ORANGE);
+					}
+				});
+			}
+			catch (Exception e)
+			{
+				// Log any errors that occur during the async operation
+				log.error("Error updating skill data for {}: {}", skill.getName(), e.getMessage());
+			}
+		});
+
+		// Shutdown the executor to prevent resource leaks
+		asyncExecutor.shutdown();
 	}
 }

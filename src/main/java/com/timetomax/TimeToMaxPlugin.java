@@ -149,8 +149,8 @@ public class TimeToMaxPlugin extends Plugin
 		resetXpHintShown = false; // Reset the hint flag on startup
 		sentWelcomeMessage = false;
 
-		// Always show empty panel until login
-		panel.showNoData();
+		// Always show loading message initially
+		panel.showLoading();
 
 		// If the client is already logged in, initialize the plugin as if just logged in
 		if (client.getGameState() == GameState.LOGGED_IN)
@@ -205,42 +205,45 @@ public class TimeToMaxPlugin extends Plugin
 						configManager.setConfiguration("timetomax", SESSION_USERNAME_KEY, playerName);
 					}
 
-					// Set the tracker in the panel
+					// Set the tracker in the panel when it's ready and trigger immediate UI update
 					if (panel != null)
 					{
 						panel.setSkillsTracker(skillsTracker);
-					}
 
-					// If we've restored a previous session, we don't need to capture initial values
-					if (!hasActiveSession)
-					{
-						// Capture initial XP values
-						captureInitialXpValues();
-					}
-					else
-					{
-						// Just mark it as initialized
-						initialXpSet = true;
-
-						// Initialize the last known XP values from current values
-						for (Skill skill : Skill.values())
+						// Do initial XP setup
+						if (!hasActiveSession)
 						{
-							try
+							// Capture initial XP values
+							captureInitialXpValues();
+						}
+						else
+						{
+							// Just mark it as initialized
+							initialXpSet = true;
+
+							// Initialize the last known XP values from current values
+							for (Skill skill : Skill.values())
 							{
-								int xp = client.getSkillExperience(skill);
-								lastSkillXp.put(skill, xp);
-							}
-							catch (Exception e)
-							{
-								log.warn("Error getting initial XP for {}", skill.getName(), e);
+								try
+								{
+									int xp = client.getSkillExperience(skill);
+									lastSkillXp.put(skill, xp);
+								}
+								catch (Exception e)
+								{
+									log.warn("Error getting initial XP for {}", skill.getName(), e);
+								}
 							}
 						}
-					}
 
-					// Update the panel
-					if (panel != null)
-					{
-						SwingUtilities.invokeLater(() -> panel.updateAllInfo());
+						// Force an immediate UI update after data is ready
+						SwingUtilities.invokeLater(() -> {
+							// Ensure the skills tracker has valid data before showing
+							if (skillsTracker.hasValidBaselineData())
+							{
+								panel.updateAllInfo();
+							}
+						});
 					}
 				}
 
@@ -249,7 +252,7 @@ public class TimeToMaxPlugin extends Plugin
 		}
 		else
 		{
-			// If not logged in, just show the empty panel
+			// If not logged in, show the empty panel
 			panel.showNoData();
 		}
 	}
@@ -680,10 +683,24 @@ public class TimeToMaxPlugin extends Plugin
 		int sessionXpGained = skillsTracker.getSessionXpGained(skill);
 		int requiredXp = XpCalculator.getRequiredXpPerInterval(skillsTracker.getBaselineXp(skill), targetDate, interval);
 
-		// Always update the panel when XP is gained
+		// Check if this XP gain causes the skill to cross from incomplete to complete status
+		boolean justCompleted = sessionXpGained >= requiredXp &&
+			requiredXp > 0 &&
+			!notifiedSkills.contains(skill);
+
+		// If panel is visible, update it
 		if (panel != null)
 		{
-			SwingUtilities.invokeLater(() -> panel.updateAllInfo());
+			if (justCompleted)
+			{
+				// When a skill is newly completed, do a full panel rebuild to move it to the completed section
+				SwingUtilities.invokeLater(() -> panel.updateAllInfo());
+			}
+			else
+			{
+				// Otherwise just update the specific skill panel to avoid flickering
+				SwingUtilities.invokeLater(() -> panel.updateSkillPanel(skill));
+			}
 		}
 
 		// Check if we need to send a notification for reaching the required XP

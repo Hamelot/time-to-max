@@ -268,6 +268,10 @@ class TimeToMaxPanel extends PluginPanel
 		// Immediately update the UI if tracker is set
 		if (isTrackerInitialized && client.getGameState().getState() >= 30)
 		{
+			// Force a snapshot refresh to ensure we have the most up-to-date data
+			skillsTracker.forceSnapshotRefresh();
+
+			// Ensure a complete rebuild of the panel to properly sort skills into categories
 			SwingUtilities.invokeLater(this::updateAllInfo);
 		}
 	}
@@ -375,137 +379,172 @@ class TimeToMaxPanel extends PluginPanel
 
 	private void rebuildSkillPanels()
 	{
-		// Clear existing skill panels
-		skillPanels.clear();
-		skillsContainer.removeAll();
-
-		// Get target date
-		LocalDate targetDate;
-		try
-		{
-			targetDate = LocalDate.parse(config.targetDate());
-		}
-		catch (DateTimeParseException e)
-		{
-			targetDate = LocalDate.now().plusMonths(6);
-		}
-
-		// Get all skills that aren't maxed yet
-		List<Skill> unmaxedSkills = new ArrayList<>();
-		for (Skill skill : Skill.values())
-		{
-
-			int currentXp = client.getSkillExperience(skill);
-			if (currentXp < XpCalculator.MAX_XP)
+		// Run intensive data gathering operations in a background thread
+		java.util.concurrent.ExecutorService asyncExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
+		asyncExecutor.submit(() -> {
+			try
 			{
-				unmaxedSkills.add(skill);
+				// Get target date
+				LocalDate targetDate;
+				try
+				{
+					targetDate = LocalDate.parse(config.targetDate());
+				}
+				catch (DateTimeParseException e)
+				{
+					targetDate = LocalDate.now().plusMonths(6);
+				}
+
+				// Get all skills that aren't maxed yet
+				java.util.List<Skill> unmaxedSkills = new ArrayList<>();
+				for (Skill skill : Skill.values())
+				{
+					int currentXp = client.getSkillExperience(skill);
+					if (currentXp < XpCalculator.MAX_XP)
+					{
+						unmaxedSkills.add(skill);
+					}
+				}
+
+				// If no skills left to max, show the congratulations message
+				if (unmaxedSkills.isEmpty())
+				{
+					javax.swing.SwingUtilities.invokeLater(() -> {
+						skillPanels.clear();
+						skillsContainer.removeAll();
+
+						JPanel congratsPanel = getCongratsJPanel();
+						skillsContainer.add(congratsPanel);
+
+						// Add bottom padding
+						JPanel bottomPadding = new JPanel();
+						bottomPadding.setBackground(ColorScheme.DARK_GRAY_COLOR);
+						skillsContainer.add(bottomPadding);
+
+						// Update the UI
+						skillsContainer.revalidate();
+						skillsContainer.repaint();
+					});
+					return;
+				}
+
+				// Sort skills into two categories: active and completed
+				java.util.List<Skill> activeSkills = new ArrayList<>();
+				java.util.List<Skill> completedSkills = new ArrayList<>();
+
+				// Create a map to collect XP gain data to avoid multiple calls to getSessionXpGained
+				java.util.Map<Skill, Integer> skillXpGainMap = new java.util.HashMap<>();
+
+				// Create a map to collect baseline XP data
+				java.util.Map<Skill, Integer> baselineXpMap = new java.util.HashMap<>();
+
+				// Collect all XP data in a batch
+				for (Skill skill : unmaxedSkills)
+				{
+					int xpGained = skillsTracker.getSessionXpGained(skill);
+					skillXpGainMap.put(skill, xpGained);
+
+					int baselineXp = skillsTracker.getBaselineXp(skill);
+					baselineXpMap.put(skill, baselineXp);
+
+					int requiredXp = XpCalculator.getRequiredXpPerInterval(baselineXp, targetDate, config.trackingInterval());
+
+					if (xpGained >= requiredXp && requiredXp > 0)
+					{
+						completedSkills.add(skill);
+					}
+					else
+					{
+						activeSkills.add(skill);
+					}
+				}
+
+				// Sort active skills by XP gained (descending)
+				activeSkills.sort((s1, s2) -> {
+					int xp1 = skillXpGainMap.getOrDefault(s1, 0);
+					int xp2 = skillXpGainMap.getOrDefault(s2, 0);
+					return Integer.compare(xp2, xp1);
+				});
+
+				// Sort completed skills by XP gained (descending)
+				completedSkills.sort((s1, s2) -> {
+					int xp1 = skillXpGainMap.getOrDefault(s1, 0);
+					int xp2 = skillXpGainMap.getOrDefault(s2, 0);
+					return Integer.compare(xp2, xp1);
+				});
+
+				// Final copies for use in the UI update lambda
+				final java.util.List<Skill> finalActiveSkills = activeSkills;
+				final java.util.List<Skill> finalCompletedSkills = completedSkills;
+
+				// Update UI on the EDT
+				javax.swing.SwingUtilities.invokeLater(() -> {
+					// Clear existing skill panels
+					skillPanels.clear();
+					skillsContainer.removeAll();
+
+					// Add active skill panels first
+					for (Skill skill : finalActiveSkills)
+					{
+						SkillTimeToMaxPanel skillPanel = new SkillTimeToMaxPanel(
+							skill,
+							client,
+							skillIconManager,
+							config,
+							skillsTracker
+						);
+						skillPanels.put(skill, skillPanel);
+						skillsContainer.add(skillPanel);
+					}
+
+					// Add a separator if we have both active and completed skills
+					if (!finalActiveSkills.isEmpty() && !finalCompletedSkills.isEmpty())
+					{
+						JPanel separator = new JPanel();
+						separator.setBackground(ColorScheme.DARK_GRAY_COLOR);
+						separator.setLayout(new BorderLayout());
+						separator.setBorder(new EmptyBorder(5, 0, 5, 0));
+
+						JLabel completedLabel = new JLabel("Completed Skills", SwingConstants.CENTER);
+						completedLabel.setForeground(Color.WHITE);
+						completedLabel.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+						separator.add(completedLabel, BorderLayout.CENTER);
+
+						skillsContainer.add(separator);
+					}
+
+					// Add completed skill panels at the bottom
+					for (Skill skill : finalCompletedSkills)
+					{
+						SkillTimeToMaxPanel skillPanel = new SkillTimeToMaxPanel(
+							skill,
+							client,
+							skillIconManager,
+							config,
+							skillsTracker
+						);
+						skillPanels.put(skill, skillPanel);
+						skillsContainer.add(skillPanel);
+					}
+
+					// Add bottom padding
+					JPanel bottomPadding = new JPanel();
+					bottomPadding.setBackground(ColorScheme.DARK_GRAY_COLOR);
+					skillsContainer.add(bottomPadding);
+
+					// Update the UI
+					skillsContainer.revalidate();
+					skillsContainer.repaint();
+				});
 			}
-		}
-
-		// If no skills left to max, show the congratulations message
-		if (unmaxedSkills.isEmpty())
-		{
-			JPanel congratsPanel = getCongratsJPanel();
-			skillsContainer.add(congratsPanel);
-
-			// Add bottom padding
-			JPanel bottomPadding = new JPanel();
-			bottomPadding.setBackground(ColorScheme.DARK_GRAY_COLOR);
-			skillsContainer.add(bottomPadding);
-
-			// Update the UI
-			skillsContainer.revalidate();
-			skillsContainer.repaint();
-			return;
-		}
-
-		// Sort skills into two categories: active and completed
-		List<Skill> activeSkills = new ArrayList<>();
-		List<Skill> completedSkills = new ArrayList<>();
-
-		for (Skill skill : unmaxedSkills)
-		{
-			int xpGained = skillsTracker.getSessionXpGained(skill);
-			// Use the baseline XP value for calculating required XP, not current XP
-			int baselineXp = skillsTracker.getBaselineXp(skill);
-			int requiredXp = XpCalculator.getRequiredXpPerInterval(baselineXp, targetDate, config.trackingInterval());
-
-			if (xpGained >= requiredXp && requiredXp > 0)
+			catch (Exception e)
 			{
-				completedSkills.add(skill);
+				log.error("Error rebuilding skill panels", e);
 			}
-			else
-			{
-				activeSkills.add(skill);
-			}
-		}
-
-		// Sort active skills by XP gained (descending)
-		activeSkills.sort((s1, s2) -> {
-			int xp1 = skillsTracker.getSessionXpGained(s1);
-			int xp2 = skillsTracker.getSessionXpGained(s2);
-			return Integer.compare(xp2, xp1);
 		});
 
-		// Sort completed skills by XP gained (descending)
-		completedSkills.sort((s1, s2) -> {
-			int xp1 = skillsTracker.getSessionXpGained(s1);
-			int xp2 = skillsTracker.getSessionXpGained(s2);
-			return Integer.compare(xp2, xp1);
-		});
-
-		// Add active skill panels first
-		for (Skill skill : activeSkills)
-		{
-			SkillTimeToMaxPanel skillPanel = new SkillTimeToMaxPanel(
-				skill,
-				client,
-				skillIconManager,
-				config,
-				skillsTracker
-			);
-			skillPanels.put(skill, skillPanel);
-			skillsContainer.add(skillPanel);
-		}
-
-		// Add a separator if we have both active and completed skills
-		if (!activeSkills.isEmpty() && !completedSkills.isEmpty())
-		{
-			JPanel separator = new JPanel();
-			separator.setBackground(ColorScheme.DARK_GRAY_COLOR);
-			separator.setLayout(new BorderLayout());
-			separator.setBorder(new EmptyBorder(5, 0, 5, 0));
-
-			JLabel completedLabel = new JLabel("Completed Skills", SwingConstants.CENTER);
-			completedLabel.setForeground(Color.WHITE);
-			completedLabel.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
-			separator.add(completedLabel, BorderLayout.CENTER);
-
-			skillsContainer.add(separator);
-		}
-
-		// Add completed skill panels at the bottom
-		for (Skill skill : completedSkills)
-		{
-			SkillTimeToMaxPanel skillPanel = new SkillTimeToMaxPanel(
-				skill,
-				client,
-				skillIconManager,
-				config,
-				skillsTracker
-			);
-			skillPanels.put(skill, skillPanel);
-			skillsContainer.add(skillPanel);
-		}
-
-		// Add bottom padding
-		JPanel bottomPadding = new JPanel();
-		bottomPadding.setBackground(ColorScheme.DARK_GRAY_COLOR);
-		skillsContainer.add(bottomPadding);
-
-		// Update the UI
-		skillsContainer.revalidate();
-		skillsContainer.repaint();
+		// Shutdown the executor to prevent resource leaks
+		asyncExecutor.shutdown();
 	}
 
 	private static JPanel getCongratsJPanel()
@@ -521,5 +560,43 @@ class TimeToMaxPanel extends PluginPanel
 
 		congratsPanel.add(congratsLabel, BorderLayout.CENTER);
 		return congratsPanel;
+	}
+
+	/**
+	 * Updates a single skill panel without rebuilding the entire UI
+	 * This prevents flickering when rapidly gaining XP
+	 *
+	 * @param skill The skill to update
+	 */
+	void updateSkillPanel(Skill skill)
+	{
+		if (client.getGameState().getState() < 30 || !isTrackerInitialized || skillsTracker == null)
+		{
+			return;
+		}
+
+		// If the panel has the skill, just update that skill's data
+		SkillTimeToMaxPanel panel = skillPanels.get(skill);
+		if (panel != null)
+		{
+			panel.updateData();
+		}
+	}
+
+	/**
+	 * Shows a loading message while data is being initialized
+	 */
+	void showLoading()
+	{
+		settingsPanel.setVisible(false);
+		scrollPane.setVisible(false);
+		remove(scrollPane);
+
+		// Update the error panel to show a loading message
+		errorPanel.setContent("Loading...", "Please wait while skill data is loaded.");
+
+		add(errorPanel, BorderLayout.CENTER);
+		errorPanel.setVisible(true);
+		revalidate();
 	}
 }

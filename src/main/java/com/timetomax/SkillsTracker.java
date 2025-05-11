@@ -22,7 +22,6 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 @Slf4j
@@ -78,22 +77,19 @@ public class SkillsTracker implements Serializable
 
 		snapshots = new CopyOnWriteArrayList<>();
 
-		boolean baselineLoaded = false;
-		try {
-			Future<Boolean> baselineFuture = executor.submit(this::loadBaselineFromFile);
-			baselineLoaded = baselineFuture.get();
-		} catch (InterruptedException | ExecutionException e) {
-			log.error("Error loading baseline from file async", e);
-		}
-		if (!baselineLoaded)
-		{
-			log.info("[SkillsTracker] No baseline found in file for profile: {}", profileKey);
-			loadBaseline();
-		}
-		else
-		{
-			log.info("[SkillsTracker] Baseline loaded from file for profile: {}", profileKey);
-		}
+		// Start loading baseline asynchronously
+		executor.submit(() -> {
+			boolean baselineLoaded = loadBaselineFromFile();
+			if (!baselineLoaded)
+			{
+				log.info("[SkillsTracker] No baseline found in file for profile: {}", profileKey);
+				loadBaseline();
+			}
+			else
+			{
+				log.info("[SkillsTracker] Baseline loaded from file for profile: {}", profileKey);
+			}
+		});
 
 		if (!baselineSet && client != null)
 		{
@@ -118,17 +114,12 @@ public class SkillsTracker implements Serializable
 			log.info("[SkillsTracker] Set new baseline and last reset time for RS profile: {}", profileKey);
 		}
 
-		try {
-			Future<Void> snapshotFuture = executor.submit(() -> {
-				loadSnapshots();
-				return null;
-			});
-			snapshotFuture.get();
-		} catch (InterruptedException | ExecutionException e) {
-			log.error("Error loading snapshots from file async", e);
-		}
-		loadLastResetTime();
+		// Load snapshots asynchronously
+		executor.submit(() -> {
+			loadSnapshots();
+		});
 
+		loadLastResetTime();
 		updateCurrentPeriodKey();
 
 		if (baselineSet && !baselineXp.isEmpty())
@@ -181,6 +172,12 @@ public class SkillsTracker implements Serializable
 				log.error("Failed to save baseline data to file", e);
 			}
 		});
+	}
+
+	// Load baseline data from file asynchronously and return the result as a Future
+	public Future<Boolean> loadBaselineFromFileAsync()
+	{
+		return executor.submit(() -> loadBaselineFromFile());
 	}
 
 	// Load baseline data from file
@@ -275,6 +272,12 @@ public class SkillsTracker implements Serializable
 				log.error("Failed to save snapshot to file", e);
 			}
 		});
+	}
+
+	// Load snapshot from file asynchronously and return the result as a Future
+	public Future<SkillsSnapshot> loadSnapshotFromFileAsync()
+	{
+		return executor.submit(() -> loadSnapshotFromFile());
 	}
 
 	// Load snapshot from file
@@ -388,6 +391,32 @@ public class SkillsTracker implements Serializable
 		log.debug("Captured new XP snapshot at: {}", snapshot.getTimestamp());
 	}
 
+	/**
+	 * Get the latest snapshot asynchronously
+	 *
+	 * @return Future containing the latest snapshot or null if none available
+	 */
+	public Future<SkillsSnapshot> getLatestSnapshotAsync()
+	{
+		return executor.submit(() -> {
+			if (snapshots.isEmpty())
+			{
+				// Try to load from file if no snapshots in memory
+				SkillsSnapshot fileSnapshot = loadSnapshotFromFile();
+				if (fileSnapshot != null)
+				{
+					snapshots.add(fileSnapshot);
+					return fileSnapshot;
+				}
+				return null;
+			}
+			return snapshots.get(snapshots.size() - 1);
+		});
+	}
+
+	/**
+	 * Get the latest snapshot synchronously - use getLatestSnapshotAsync() for non-blocking access
+	 */
 	public SkillsSnapshot getLatestSnapshot()
 	{
 		if (snapshots.isEmpty())
@@ -438,6 +467,65 @@ public class SkillsTracker implements Serializable
 		}
 
 		return 0;
+	}
+
+	/**
+	 * Get the raw XP gained for a skill since the baseline was set, asynchronously
+	 *
+	 * @return Future containing the XP gained
+	 */
+	public Future<Integer> getSessionXpGainedAsync(Skill skill)
+	{
+		return executor.submit(() -> {
+			if (!baselineSet || !baselineXp.containsKey(skill))
+			{
+				return 0;
+			}
+
+			int baseXp = baselineXp.get(skill);
+
+			// Try to get from latest snapshot first
+			try
+			{
+				Future<SkillsSnapshot> snapshotFuture = getLatestSnapshotAsync();
+				SkillsSnapshot current = snapshotFuture.get(); // This is OK since we're already in an executor task
+				if (current != null)
+				{
+					return current.getExperience(skill) - baseXp;
+				}
+			}
+			catch (Exception e)
+			{
+				log.warn("Error getting snapshot asynchronously for {}", skill.getName(), e);
+			}
+
+			// If no snapshot available, create one
+			if (client != null)
+			{
+				try
+				{
+					int currentXp = client.getSkillExperience(skill);
+					return currentXp - baseXp;
+				}
+				catch (Exception e)
+				{
+					log.warn("Error getting current XP for {}", skill.getName(), e);
+				}
+			}
+
+			return 0;
+		});
+	}
+
+	/**
+	 * Get the baseline XP value for a skill asynchronously
+	 *
+	 * @param skill The skill to get baseline XP for
+	 * @return Future containing the baseline XP value, or 0 if not available
+	 */
+	public Future<Integer> getBaselineXpAsync(Skill skill)
+	{
+		return executor.submit(() -> getBaselineXp(skill));
 	}
 
 	/**
@@ -604,19 +692,21 @@ public class SkillsTracker implements Serializable
 
 	private void loadLastResetTime()
 	{
-		try
-		{
-			lastResetTimeStr = configManager.getRSProfileConfiguration(CONFIG_GROUP, lastResetKey, String.class);
-			if (lastResetTimeStr != null && !lastResetTimeStr.isEmpty())
+		executor.submit(() -> {
+			try
 			{
-				log.debug("Loaded last reset time: {}", lastResetTimeStr);
+				lastResetTimeStr = configManager.getRSProfileConfiguration(CONFIG_GROUP, lastResetKey, String.class);
+				if (lastResetTimeStr != null && !lastResetTimeStr.isEmpty())
+				{
+					log.debug("Loaded last reset time: {}", lastResetTimeStr);
+				}
 			}
-		}
-		catch (Exception e)
-		{
-			log.error("Failed to load last reset time", e);
-			lastResetTimeStr = null;
-		}
+			catch (Exception e)
+			{
+				log.error("Failed to load last reset time", e);
+				lastResetTimeStr = null;
+			}
+		});
 	}
 
 	/**
@@ -860,53 +950,55 @@ public class SkillsTracker implements Serializable
 		// Only try this if regular baseline loading failed
 		if (!baselineSet || baselineXp.isEmpty())
 		{
-			try
-			{
-				// First try from file (most reliable)
-				if (loadBaselineFromFile())
+			executor.submit(() -> {
+				try
 				{
-					return;
-				}
-
-				// Then try from ConfigManager
-				Object data = configManager.getConfiguration(CONFIG_GROUP, DIRECT_BASELINE_KEY);
-				if (data != null && data instanceof Map)
-				{
-					Map<?, ?> directMap = (Map<?, ?>) data;
-					boolean foundValidData = false;
-
-					for (Map.Entry<?, ?> entry : directMap.entrySet())
+					// First try from file (most reliable)
+					if (loadBaselineFromFile())
 					{
-						if (entry.getKey() instanceof String && entry.getValue() instanceof Number)
+						return;
+					}
+
+					// Then try from ConfigManager
+					Object data = configManager.getConfiguration(CONFIG_GROUP, DIRECT_BASELINE_KEY);
+					if (data != null && data instanceof Map)
+					{
+						Map<?, ?> directMap = (Map<?, ?>) data;
+						boolean foundValidData = false;
+
+						for (Map.Entry<?, ?> entry : directMap.entrySet())
 						{
-							try
+							if (entry.getKey() instanceof String && entry.getValue() instanceof Number)
 							{
-								Skill skill = Skill.valueOf((String) entry.getKey());
-								baselineXp.put(skill, ((Number) entry.getValue()).intValue());
-								foundValidData = true;
-							}
-							catch (IllegalArgumentException e)
-							{
-								log.debug("Skipping invalid skill in direct baseline: {}", entry.getKey());
+								try
+								{
+									Skill skill = Skill.valueOf((String) entry.getKey());
+									baselineXp.put(skill, ((Number) entry.getValue()).intValue());
+									foundValidData = true;
+								}
+								catch (IllegalArgumentException e)
+								{
+									log.debug("Skipping invalid skill in direct baseline: {}", entry.getKey());
+								}
 							}
 						}
-					}
 
-					if (foundValidData)
-					{
-						baselineSet = true;
-						log.info("Successfully loaded baseline from direct storage");
+						if (foundValidData)
+						{
+							baselineSet = true;
+							log.info("Successfully loaded baseline from direct storage");
 
-						// Store it back in the player-specific key
-						saveBaseline();
-						saveBaselineToFile(); // Also save to file
+							// Store it back in the player-specific key
+							saveBaseline();
+							saveBaselineToFile(); // Also save to file
+						}
 					}
 				}
-			}
-			catch (Exception e)
-			{
-				log.error("Failed to load direct baseline", e);
-			}
+				catch (Exception e)
+				{
+					log.error("Failed to load direct baseline", e);
+				}
+			});
 		}
 	}
 
