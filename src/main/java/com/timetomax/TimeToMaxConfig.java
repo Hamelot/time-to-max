@@ -31,15 +31,61 @@ import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
 import net.runelite.client.config.Units;
 
+import java.time.LocalDate;
+
 @ConfigGroup("timeToMax")
 public interface TimeToMaxConfig extends Config
 {
+	@ConfigSection(
+		name = "Target Settings",
+		description = "Settings for target date and tracking interval",
+		position = 0
+	)
+	String targetSection = "target";
+
 	@ConfigSection(
 		name = "Overlay",
 		description = "Canvas overlay options.",
 		position = 99
 	)
 	String overlaySection = "overlay";
+
+	@ConfigItem(
+		section = targetSection,
+		position = 0,
+		keyName = "targetDate",
+		name = "Target Date",
+		description = "The target date to reach max level (format: YYYY-MM-DD)"
+	)
+	default String targetDate()
+	{
+		// Default to 1 year from now
+		return LocalDate.now().plusYears(1).toString();
+	}
+
+	@ConfigItem(
+		section = targetSection,
+		position = 1,
+		keyName = "trackingInterval",
+		name = "Tracking Interval",
+		description = "The interval used for tracking XP progress (day, week, month)"
+	)
+	default TrackingInterval trackingInterval()
+	{
+		return TrackingInterval.DAY;
+	}
+
+	@ConfigItem(
+		section = targetSection,
+		position = 2,
+		keyName = "progressBarMode",
+		name = "Progress Bar Mode",
+		description = "Display mode for progress bars (level progress or target progress)"
+	)
+	default ProgressBarMode progressBarMode()
+	{
+		return ProgressBarMode.TARGET;
+	}
 
 	@ConfigItem(
 		keyName = "saveState",
@@ -53,17 +99,6 @@ public interface TimeToMaxConfig extends Config
 
 	@ConfigItem(
 		position = 0,
-		keyName = "hideMaxed",
-		name = "Hide maxed skills",
-		description = "XP tracker will no longer track level 99 skills."
-	)
-	default boolean hideMaxed()
-	{
-		return true;
-	}
-
-	@ConfigItem(
-		position = 1,
 		keyName = "logoutPausing",
 		name = "Pause on logout",
 		description = "Configures whether skills should pause on logout."
@@ -74,7 +109,7 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 2,
+		position = 1,
 		keyName = "intermediateLevelMarkers",
 		name = "Show intermediate level markers",
 		description = "Marks intermediate levels on the progress bar."
@@ -85,7 +120,7 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 3,
+		position = 2,
 		keyName = "pauseSkillAfter",
 		name = "Auto pause after",
 		description = "Configures how many minutes passes before pausing a skill while in game and there's no XP, 0 means disabled."
@@ -97,7 +132,7 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 4,
+		position = 3,
 		keyName = "resetSkillRateAfter",
 		name = "Auto reset after",
 		description = "Configures how many minutes passes before resetting a skill's per hour rates while in game and there's no XP, 0 means disabled."
@@ -109,7 +144,7 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 5,
+		position = 4,
 		keyName = "skillTabOverlayMenuOptions",
 		name = "Add skill tab canvas menu option",
 		description = "Configures whether a menu option to show/hide canvas XP trackers will be added to skills on the skill tab.",
@@ -121,7 +156,7 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 6,
+		position = 5,
 		keyName = "onScreenDisplayMode",
 		name = "On-screen tracker display mode (top)",
 		description = "Configures the information displayed in the first line of on-screen XP overlays.",
@@ -133,7 +168,7 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 7,
+		position = 6,
 		keyName = "onScreenDisplayModeBottom",
 		name = "On-screen tracker display mode (bottom)",
 		description = "Configures the information displayed in the second line of on-screen XP overlays.",
@@ -145,7 +180,7 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 8,
+		position = 7,
 		keyName = "xpPanelLabel1",
 		name = "Top-left XP info label",
 		description = "Configures the information displayed in the top-left of XP info box."
@@ -156,7 +191,7 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 9,
+		position = 8,
 		keyName = "xpPanelLabel2",
 		name = "Top-right XP info label",
 		description = "Configures the information displayed in the top-right of XP info box."
@@ -168,7 +203,7 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 10,
+		position = 9,
 		keyName = "xpPanelLabel3",
 		name = "Bottom-left XP info label",
 		description = "Configures the information displayed in the bottom-left of XP info box."
@@ -179,7 +214,7 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 11,
+		position = 10,
 		keyName = "xpPanelLabel4",
 		name = "Bottom-right XP info label",
 		description = "Configures the information displayed in the bottom-right of XP info box."
@@ -190,7 +225,7 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 12,
+		position = 11,
 		keyName = "progressBarLabel",
 		name = "Progress bar label",
 		description = "Configures the info box progress bar to show time to goal or percentage complete."
@@ -201,7 +236,7 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 13,
+		position = 12,
 		keyName = "progressBarTooltipLabel",
 		name = "Tooltip label",
 		description = "Configures the info box progress bar tooltip to show time to goal or percentage complete."
@@ -212,23 +247,12 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 14,
+		position = 13,
 		keyName = "prioritizeRecentXpSkills",
 		name = "Move recently trained skills to top",
 		description = "Configures whether skills should be organized by most recently gained XP."
 	)
 	default boolean prioritizeRecentXpSkills()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		position = 15,
-		keyName = "wiseOldManOpenOption",
-		name = "Wise Old Man option",
-		description = "Adds an option to the XP info box right-click menu to open Wise Old Man."
-	)
-	default boolean wiseOldManOpenOption()
 	{
 		return true;
 	}

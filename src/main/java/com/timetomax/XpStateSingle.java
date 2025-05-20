@@ -56,15 +56,15 @@ class XpStateSingle
 	// the last time the skill xp changed in ms
 	@Getter
 	private long lastChangeMillis;
-
 	private int startLevelExp = 0;
 	private int endLevelExp = 0;
 
 	XpStateSingle(long startXp)
 	{
 		this.startXp = startXp;
+		this.endLevelExp = XpCalculator.MAX_XP; // Initialize to MAX_XP by default
 	}
-
+	
 	long getCurrentXp()
 	{
 		return startXp + getTotalXpGained();
@@ -84,7 +84,6 @@ class XpStateSingle
 	{
 		return (int) ((1.0 / (getTimeElapsedInSeconds() / 3600.0)) * value);
 	}
-
 	private long getTimeElapsedInSeconds()
 	{
 		// If the skill started just now, we can divide by near zero, this results in odd behavior.
@@ -93,10 +92,17 @@ class XpStateSingle
 		// but it isn't ridiculous like saying 2 billion XP per hour.
 		return Math.max(60, skillTime / 1000);
 	}
-
 	private int getXpRemaining()
 	{
-		return endLevelExp - (int) getCurrentXp();
+		// For properly configured goal-based tracking
+		if (endLevelExp == XpCalculator.MAX_XP)
+		{
+			// Return XP remaining to max level
+			return Math.max(0, XpCalculator.MAX_XP - (int) getCurrentXp());
+		}
+		
+		// Return XP remaining to the next level or configured goal
+		return Math.max(0, endLevelExp - (int) getCurrentXp());
 	}
 
 	private int getActionsRemaining()
@@ -252,29 +258,40 @@ class XpStateSingle
 		lastChangeMillis = System.currentTimeMillis();
 
 		return true;
-	}
-
-	void updateGoals(long currentXp, int goalStartXp, int goalEndXp)
+	}	void updateGoals(long currentXp, int goalStartXp, int goalEndXp)
 	{
-		if (goalStartXp < 0 || currentXp > goalEndXp)
-		{
-			startLevelExp = Experience.getXpForLevel(Experience.getLevelForXp((int) currentXp));
-		}
-		else
-		{
-			startLevelExp = goalStartXp;
-		}
+		int currentLevel = Experience.getLevelForXp((int) currentXp);
+		
+		// On initial setup or reset, use the current level's base XP
+		startLevelExp = (goalStartXp < 0 || currentXp > goalEndXp) 
+			? Experience.getXpForLevel(currentLevel)  // XP required for current level
+			: goalStartXp;
 
+		// For the end goal, use next level or specified goal
 		if (goalEndXp <= 0 || currentXp > goalEndXp)
 		{
-			int currentLevel = Experience.getLevelForXp((int) currentXp);
-			endLevelExp = currentLevel + 1 <= Experience.MAX_VIRT_LEVEL
-				? Experience.getXpForLevel(currentLevel + 1)
-				: Experience.MAX_SKILL_XP;
+			// If at max level, use max XP as goal
+			if (currentLevel >= Experience.MAX_VIRT_LEVEL)
+			{
+				endLevelExp = Experience.MAX_SKILL_XP;
+			}
+			else
+			{
+				// For initial setup, the end goal should be max XP (13,034,431 for level 99)
+				// This ensures that "XP Left" shows the XP remaining to max
+				endLevelExp = XpCalculator.MAX_XP;
+			}
 		}
 		else
 		{
 			endLevelExp = goalEndXp;
+		}
+		
+		// Ensure the endLevelExp is always greater than or equal to currentXp
+		// This prevents negative XP remaining values
+		if (endLevelExp < currentXp)
+		{
+			endLevelExp = (int) currentXp;
 		}
 	}
 

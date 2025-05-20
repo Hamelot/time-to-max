@@ -102,23 +102,23 @@ class XpInfoBoxOverlay extends OverlayPanel
 		final String bottomRightNum = config.onScreenDisplayModeBottom().getValueFunc().apply(snapshot);
 
 		final LineComponent xpLineBottom = LineComponent.builder()
-				.left(bottomLeftStr + ":")
-				.right(bottomRightNum)
-				.build();
+			.left(bottomLeftStr + ":")
+			.right(bottomRightNum)
+			.build();
 
 		final SplitComponent xpSplit = SplitComponent.builder()
-				.first(xpLine)
-				.second(xpLineBottom)
-				.orientation(ComponentOrientation.VERTICAL)
-				.build();
+			.first(xpLine)
+			.second(xpLineBottom)
+			.orientation(ComponentOrientation.VERTICAL)
+			.build();
 
 		final ImageComponent imageComponent = new ImageComponent(icon);
 		final SplitComponent iconXpSplit = SplitComponent.builder()
-				.first(imageComponent)
-				.second(xpSplit)
-				.orientation(ComponentOrientation.HORIZONTAL)
-				.gap(new Point(XP_AND_ICON_GAP, 0))
-				.build();
+			.first(imageComponent)
+			.second(xpSplit)
+			.orientation(ComponentOrientation.HORIZONTAL)
+			.gap(new Point(XP_AND_ICON_GAP, 0))
+			.build();
 
 		iconXpSplitPanel.getChildren().add(iconXpSplit);
 
