@@ -50,6 +50,14 @@ class XpSaveSingle
 	int xpGainedSinceReset;
 	@SerializedName("t")
 	long time; // ms
+//	@SerializedName("a")
+//	int actions = 0; // total actions, with default value for backward compatibility
+//	@SerializedName("as")
+//	int actionsSinceReset = 0; // actions since reset, with default value
+//	@SerializedName("lc")
+//	long lastChangeMillis = 0; // last time the skill was updated, with default value
+//	@SerializedName("ai")
+//	boolean actionsHistoryInitialized = false; // whether the actions history is initialized, with default value
 }
 
 class XpSaveSerializer implements Serializer<XpSave>

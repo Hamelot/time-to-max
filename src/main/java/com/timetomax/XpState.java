@@ -6,11 +6,13 @@ import java.util.List;
 import java.util.Map;
 import javax.inject.Inject;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Skill;
 
 /**
  * Internal state for the TimeToMaxPlugin
  */
+@Slf4j
 class XpState
 {
 	private final Map<Skill, XpStateSingle> xpSkills = new EnumMap<>(Skill.class);
@@ -159,6 +161,12 @@ class XpState
 		return xpStateSingle != null && xpStateSingle.getStartXp() != -1;
 	}
 
+	void unInitializeSkill(Skill skill)
+	{
+		XpStateSingle xpStateSingle = xpSkills.get(skill);
+		xpStateSingle.setStartXp(-1);
+	}
+
 	boolean isOverallInitialized()
 	{
 		return overall.getStartXp() != -1;
@@ -259,6 +267,5 @@ class XpState
 			xpSkills.put(skill, state);
 			order.add(skill);
 		}
-		overall.restore(save.overall);
 	}
 }

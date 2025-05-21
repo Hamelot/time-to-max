@@ -18,6 +18,8 @@ public class XpCalculator
 	private static final Map<Skill, Integer> targetStartXp = new HashMap<>();
 	private static final Map<Skill, LocalDate> periodStartDates = new HashMap<>();
 	private static LocalDate lastTargetDate = null;
+	// Cache for the required XP per day values to ensure consistency
+	private static final Map<Skill, Integer> cachedXpPerDay = new HashMap<>();
 
 	/**
 	 * Check if a new period should start for a skill based on the interval
@@ -47,7 +49,6 @@ public class XpCalculator
 				return true;
 		}
 	}
-
 	/**
 	 * Records the starting XP for target tracking and updates period tracking
 	 *
@@ -63,13 +64,23 @@ public class XpCalculator
 		{
 			targetStartXp.clear();
 			periodStartDates.clear();
+			cachedXpPerDay.clear(); // Clear cached values when target date changes
 			lastTargetDate = targetDate;
 		}
 
-		// Check if we need to start a new period
-		if (shouldStartNewPeriod(skill, interval))
+		// Check if we need to start a new period or initialize tracking
+		if (!targetStartXp.containsKey(skill))
 		{
-			targetStartXp.put(skill, currentXp);
+			targetStartXp.put(skill, Math.max(0, currentXp)); // Initialize tracking
+			periodStartDates.put(skill, LocalDate.now());
+			
+			// Cache the XP per day value for consistency
+			int xpPerDay = getRequiredXpPerDay(currentXp, targetDate);
+			cachedXpPerDay.put(skill, xpPerDay);
+		}
+		else if (shouldStartNewPeriod(skill, interval))
+		{
+			// Only update period start date without modifying targetStartXp or cached values
 			periodStartDates.put(skill, LocalDate.now());
 		}
 	}
@@ -90,23 +101,22 @@ public class XpCalculator
 		}
 		return Math.max(0, currentXp - startXp);
 	}
-
 	/**
 	 * Get the required XP per day to reach max level by the target date
 	 *
-	 * @param currentXp  Current XP in the skill
+	 * @param startXp  Start XP in the skill
 	 * @param targetDate Target date to reach max level
 	 * @return XP required per day
 	 */
-	public static int getRequiredXpPerDay(int currentXp, LocalDate targetDate)
+	public static int getRequiredXpPerDay(int startXp, LocalDate targetDate)
 	{
 		long daysUntilTarget = ChronoUnit.DAYS.between(LocalDate.now(), targetDate);
 		if (daysUntilTarget <= 0)
 		{
-			return MAX_XP - currentXp; // Target date is today or in the past
+			return MAX_XP - startXp; // Target date is today or in the past
 		}
 
-		int xpRemaining = MAX_XP - currentXp;
+		int xpRemaining = MAX_XP - startXp;
 		if (xpRemaining <= 0)
 		{
 			return 0;
@@ -114,18 +124,63 @@ public class XpCalculator
 
 		return (int) Math.ceil((double) xpRemaining / daysUntilTarget);
 	}
-
+	
+	/**
+	 * Get the required XP per day, with caching to ensure consistency
+	 * 
+	 * @param skill The skill to get XP per day for
+	 * @param startXp Start XP in the skill
+	 * @param targetDate Target date to reach max level
+	 * @return XP required per day
+	 */
+	public static int getRequiredXpPerDayCached(Skill skill, int startXp, LocalDate targetDate)
+	{
+		// Return cached value if it exists
+		if (cachedXpPerDay.containsKey(skill))
+		{
+			return cachedXpPerDay.get(skill);
+		}
+		
+		// Calculate and cache the value
+		int xpPerDay = getRequiredXpPerDay(startXp, targetDate);
+		cachedXpPerDay.put(skill, xpPerDay);
+		return xpPerDay;
+	}
 	/**
 	 * Get the required XP per interval to reach max level by the target date
 	 *
-	 * @param currentXp  Current XP in the skill
+	 * @param startXp  Start XP in the skill
 	 * @param targetDate Target date to reach max level
 	 * @param interval   The interval (day, week, month)
 	 * @return XP required per interval
 	 */
-	public static int getRequiredXpPerInterval(int currentXp, LocalDate targetDate, TrackingInterval interval)
+	public static int getRequiredXpPerInterval(int startXp, LocalDate targetDate, TrackingInterval interval)
 	{
-		int xpPerDay = getRequiredXpPerDay(currentXp, targetDate);
+		int xpPerDay = getRequiredXpPerDay(startXp, targetDate);
+
+		switch (interval)
+		{
+			case WEEK:
+				return xpPerDay * 7;
+			case MONTH:
+				return xpPerDay * 30;
+			default:
+				return xpPerDay;
+		}
+	}
+	
+	/**
+	 * Get the required XP per interval using cached daily XP values
+	 *
+	 * @param skill The skill to get XP for
+	 * @param startXp Start XP in the skill
+	 * @param targetDate Target date to reach max level
+	 * @param interval The interval (day, week, month)
+	 * @return XP required per interval
+	 */
+	public static int getRequiredXpPerIntervalCached(Skill skill, int startXp, LocalDate targetDate, TrackingInterval interval)
+	{
+		int xpPerDay = getRequiredXpPerDayCached(skill, startXp, targetDate);
 
 		switch (interval)
 		{
@@ -139,6 +194,19 @@ public class XpCalculator
 	}
 
 	/**
+	 * @param skill The skill to check
+	 * @return XP tracked from the start for a skill, or zero if no start xp found
+	 */
+	public static int getTargetStartXp(Skill skill)
+	{
+		Integer startXp = targetStartXp.get(skill);
+		if (startXp == null)
+		{
+			return 0;
+		}
+		return startXp;
+	}
+	/**
 	 * Clear target tracking data for a skill or all skills
 	 *
 	 * @param skill The skill to clear, or null to clear all skills
@@ -149,12 +217,25 @@ public class XpCalculator
 		{
 			targetStartXp.clear();
 			periodStartDates.clear();
+			cachedXpPerDay.clear(); // Clear cached values
 			lastTargetDate = null;
 		}
 		else
 		{
 			targetStartXp.remove(skill);
 			periodStartDates.remove(skill);
+			cachedXpPerDay.remove(skill); // Clear cached value for this skill
 		}
+	}
+
+	/**
+	 * Check if a skill is currently being tracked
+	 *
+	 * @param skill The skill to check
+	 * @return true if the skill is being tracked, false otherwise
+	 */
+	public static boolean isSkillTracked(Skill skill)
+	{
+		return targetStartXp.containsKey(skill);
 	}
 }

@@ -258,17 +258,19 @@ class XpStateSingle
 		lastChangeMillis = System.currentTimeMillis();
 
 		return true;
-	}	void updateGoals(long currentXp, int goalStartXp, int goalEndXp)
+	}
+
+	void updateGoals(long currentXp, int goalStartXp, int goalEndXp)
 	{
 		int currentLevel = Experience.getLevelForXp((int) currentXp);
 		
 		// On initial setup or reset, use the current level's base XP
-		startLevelExp = (goalStartXp < 0 || currentXp > goalEndXp) 
+		startLevelExp = (goalStartXp < 0 || currentXp > (goalEndXp + startXp))
 			? Experience.getXpForLevel(currentLevel)  // XP required for current level
 			: goalStartXp;
 
 		// For the end goal, use next level or specified goal
-		if (goalEndXp <= 0 || currentXp > goalEndXp)
+		if (goalEndXp <= 0 || currentXp > (goalEndXp + startXp))
 		{
 			// If at max level, use max XP as goal
 			if (currentLevel >= Experience.MAX_VIRT_LEVEL)
@@ -324,7 +326,6 @@ class XpStateSingle
 			.endGoalXp(endLevelExp)
 			.build();
 	}
-
 	XpSaveSingle save()
 	{
 		XpSaveSingle save = new XpSaveSingle();

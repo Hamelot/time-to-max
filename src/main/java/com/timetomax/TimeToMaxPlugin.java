@@ -199,6 +199,7 @@ public class TimeToMaxPlugin extends Plugin
 	protected void shutDown() throws Exception
 	{
 		overlayManager.removeIf(e -> e instanceof XpInfoBoxOverlay);
+		xpState.reset();
 		clientToolbar.removeNavigation(navButton);
 	}
 
@@ -224,24 +225,7 @@ public class TimeToMaxPlugin extends Plugin
 				// xp is not available until after login is finished, so fetch it on the next gametick
 				fetchXp = true;
 				lastWorldType = type;
-
-				// Clear current state
-				clientThread.invokeLater(() -> {
-					resetState();
-
-					// Try to restore saved state first
-					if (timeToMaxConfig.saveState())
-					{
-						XpSave save = loadSaveState(configManager.getRSProfileKey());
-						if (save != null)
-						{
-							log.debug("Restoring saved XP state after login");
-							xpState.restore(save);
-							// Update UI with restored state
-							rebuildSkills();
-						}
-					}
-				});
+				resetState();
 
 				// Must be set from hitting the LOGGING_IN or HOPPING case below
 				assert initializeTracker > 0;
@@ -340,19 +324,16 @@ public class TimeToMaxPlugin extends Plugin
 	 */
 	void resetAndInitState()
 	{
-		clearSaveState(configManager.getRSProfileKey());
-		resetState();
-
 		for (Skill skill : Skill.values())
 		{
-			long currentXp = client.getSkillExperience(skill);
-			xpState.initializeSkill(skill, currentXp);
-			xpState.getSkill(skill).resetPerHour(); // Ensure full reset of skill state
-			removeOverlay(skill);
+			resetSkillState(skill);
+			XpCalculator.clearTargetTracking(skill);
+			xpState.unInitializeSkill(skill);
 		}
 
+		initializeTracker = 1;
+		initializeNonMaxedSkills();
 		xpState.initializeOverall(client.getOverallExperience());
-		xpState.resetOverallPerHour(); // Use resetOverallPerHour to reset overall state
 	}
 
 	/**
@@ -382,13 +363,14 @@ public class TimeToMaxPlugin extends Plugin
 			return;
 		}
 
-		int currentXp = client.getSkillExperience(skill);
-		xpState.initializeSkill(skill, currentXp);
-		xpState.getSkill(skill).resetPerHour(); // Ensure full reset of the skill state
 		removeOverlay(skill);
 
 		// Clear any target tracking data
 		XpCalculator.clearTargetTracking(skill);
+		xpState.unInitializeSkill(skill);
+		initializeTracker = 1;
+		initializeNonMaxedSkills();
+		xpState.initializeOverall(client.getOverallExperience());
 	}
 
 	/**
@@ -436,7 +418,6 @@ public class TimeToMaxPlugin extends Plugin
 	{
 		final Skill skill = statChanged.getSkill();
 		final int currentXp = statChanged.getXp();
-		final int currentLevel = statChanged.getLevel();
 
 		// Get target date and interval from config
 		LocalDate targetDate;
@@ -459,22 +440,15 @@ public class TimeToMaxPlugin extends Plugin
 			return;
 		}
 		// Calculate goal XP values using the period tracking system
-		final int startGoalXp;
-		if (XpCalculator.shouldStartNewPeriod(skill, interval))
-		{
-			startGoalXp = currentXp; // Start fresh for new period
-		}
-		else
-		{
-			int targetXpGained = XpCalculator.getTargetXpGained(skill, currentXp);
-			startGoalXp = Math.max(currentXp - targetXpGained, 0);
-		}
+		final int goalStartXp = XpCalculator.getTargetStartXp(skill);
 
 		// Always set the end goal to max XP for "XP Left" to show the correct value
-		final int endGoalXp = XpCalculator.MAX_XP;
+		// calculate based off of target date and interval logic
+		//final int endGoalXp = XpCalculator.MAX_XP;
+		final int endGoalXp = XpCalculator.getRequiredXpPerIntervalCached(skill, goalStartXp, targetDate, interval);
 
 		// Update the skill state and UI
-		final XpUpdateResult updateResult = xpState.updateSkill(skill, currentXp, startGoalXp, endGoalXp);
+		final XpUpdateResult updateResult = xpState.updateSkill(skill, currentXp, goalStartXp, endGoalXp);
 		xpPanel.updateSkillExperience(updateResult == XpUpdateResult.UPDATED, xpPauseState.isPaused(skill), skill, xpState.getSkillSnapshot(skill));
 
 		// Also update the total experience
@@ -492,21 +466,14 @@ public class TimeToMaxPlugin extends Plugin
 		{
 			clientThread.invokeLater(() -> {
 				XpSave save;
-				// Restore from saved state			// First try to restore from saved state if available
-				if (!xpState.isOverallInitialized() && timeToMaxConfig.saveState() && (save = loadSaveState(configManager.getRSProfileKey())) != null)
+				// Restore from saved state
+				if (timeToMaxConfig.saveState() && (save = loadSaveState(configManager.getRSProfileKey())) != null)
 				{
 					log.debug("Loading xp state from save");
-					xpState.restore(save);
-
-					// xpsave doesn't save or restore xp goals, fetch them from the client
-					// and apply them to the xpstate
-					for (Skill skill : save.skills.keySet())
+					xpState.restore(save);					for (Skill skill : save.skills.keySet())
 					{
-						@Varp final int startGoal = startGoalVarpForSkill(skill);
-						@Varp final int endGoal = endGoalVarpForSkill(skill);
-						final int startGoalXp = client.getVarpValue(startGoal);
-						final int endGoalXp = client.getVarpValue(endGoal);
-
+						final int startGoalXp = XpCalculator.getTargetStartXp(skill);
+						final int endGoalXp = XpCalculator.getRequiredXpPerIntervalCached(skill, startGoalXp, LocalDate.parse(timeToMaxConfig.targetDate()), timeToMaxConfig.trackingInterval());
 						XpStateSingle x = xpState.getSkill(skill);
 						x.updateGoals(x.getCurrentXp(), startGoalXp, endGoalXp);
 					}
@@ -551,9 +518,6 @@ public class TimeToMaxPlugin extends Plugin
 						skillState.setStartXp(skillState.getStartXp() + diff);
 					}
 				}
-
-				// Initialize all non-maxed skills and show them in the panel
-				initializeNonMaxedSkills();
 			});
 		}
 
@@ -586,13 +550,18 @@ public class TimeToMaxPlugin extends Plugin
 				catch (DateTimeParseException e)
 				{
 					targetDate = LocalDate.now().plusYears(1);
-				}				// Initialize tracking for the skill
-				XpCalculator.recordTargetStartXp(skill, currentXp, targetDate, interval);
-				int startGoalXp = Math.max(currentXp - XpCalculator.getTargetXpGained(skill, currentXp), 0);
-				// Always set endGoalXp to MAX_XP so XP Left shows distance to max
-				int endGoalXp = XpCalculator.MAX_XP;
+				}
 
-				XpUpdateResult xpUpdateResult = xpState.updateSkill(skill, currentXp, startGoalXp, endGoalXp);
+				// For skill state, we want to initialize with the current XP
+				// but adjust for interval tracking
+				int currentXpValue = client.getSkillExperience(skill);
+				int startGoalXp = XpCalculator.getTargetStartXp(skill);				// Initialize tracking for the skill with the current XP as baseline
+				// This ensures correct interval tracking from the start
+				XpCalculator.recordTargetStartXp(skill, currentXpValue, targetDate, interval);
+				// Use cached interval calculation for consistency
+				int endGoalXp = XpCalculator.getRequiredXpPerIntervalCached(skill, startGoalXp, targetDate, interval);
+
+				XpUpdateResult xpUpdateResult = xpState.updateSkill(skill, currentXpValue, startGoalXp, endGoalXp);
 				if (xpUpdateResult == XpUpdateResult.INITIALIZED || xpUpdateResult == XpUpdateResult.UPDATED)
 				{
 					xpPanel.updateSkillExperience(true, false, skill, xpState.getSkillSnapshot(skill));
@@ -634,7 +603,6 @@ public class TimeToMaxPlugin extends Plugin
 		{
 			return;
 		}
-
 		client.createMenuEntry(-1)
 			.setTarget(skillText)
 			.setOption(hasOverlay(skill) ? MENUOP_REMOVE_CANVAS_TRACKER : MENUOP_ADD_CANVAS_TRACKER)
@@ -662,122 +630,30 @@ public class TimeToMaxPlugin extends Plugin
 		return xpState.getSkillSnapshot(skill);
 	}
 
-	private static @Varp int startGoalVarpForSkill(final Skill skill)
-	{
-		switch (skill)
-		{
-			case ATTACK:
-				return VarPlayerID.XPDROPS_ATTACK_START;
-			case MINING:
-				return VarPlayerID.XPDROPS_MINING_START;
-			case WOODCUTTING:
-				return VarPlayerID.XPDROPS_WOODCUTTING_START;
-			case DEFENCE:
-				return VarPlayerID.XPDROPS_DEFENCE_START;
-			case MAGIC:
-				return VarPlayerID.XPDROPS_MAGIC_START;
-			case RANGED:
-				return VarPlayerID.XPDROPS_RANGED_START;
-			case HITPOINTS:
-				return VarPlayerID.XPDROPS_HITPOINTS_START;
-			case AGILITY:
-				return VarPlayerID.XPDROPS_AGILITY_START;
-			case STRENGTH:
-				return VarPlayerID.XPDROPS_STRENGTH_START;
-			case PRAYER:
-				return VarPlayerID.XPDROPS_PRAYER_START;
-			case SLAYER:
-				return VarPlayerID.XPDROPS_SLAYER_START;
-			case FISHING:
-				return VarPlayerID.XPDROPS_FISHING_START;
-			case RUNECRAFT:
-				return VarPlayerID.XPDROPS_RUNECRAFT_START;
-			case HERBLORE:
-				return VarPlayerID.XPDROPS_HERBLORE_START;
-			case FIREMAKING:
-				return VarPlayerID.XPDROPS_FIREMAKING_START;
-			case CONSTRUCTION:
-				return VarPlayerID.XPDROPS_CONSTRUCTION_START;
-			case HUNTER:
-				return VarPlayerID.XPDROPS_HUNTER_START;
-			case COOKING:
-				return VarPlayerID.XPDROPS_COOKING_START;
-			case FARMING:
-				return VarPlayerID.XPDROPS_FARMING_START;
-			case CRAFTING:
-				return VarPlayerID.XPDROPS_CRAFTING_START;
-			case SMITHING:
-				return VarPlayerID.XPDROPS_SMITHING_START;
-			case THIEVING:
-				return VarPlayerID.XPDROPS_THIEVING_START;
-			case FLETCHING:
-				return VarPlayerID.XPDROPS_FLETCHING_START;
-			default:
-				throw new IllegalArgumentException();
-		}
-	}
-
-	private static @Varp int endGoalVarpForSkill(final Skill skill)
-	{
-		switch (skill)
-		{
-			case ATTACK:
-				return VarPlayerID.XPDROPS_ATTACK_END;
-			case MINING:
-				return VarPlayerID.XPDROPS_MINING_END;
-			case WOODCUTTING:
-				return VarPlayerID.XPDROPS_WOODCUTTING_END;
-			case DEFENCE:
-				return VarPlayerID.XPDROPS_DEFENCE_END;
-			case MAGIC:
-				return VarPlayerID.XPDROPS_MAGIC_END;
-			case RANGED:
-				return VarPlayerID.XPDROPS_RANGED_END;
-			case HITPOINTS:
-				return VarPlayerID.XPDROPS_HITPOINTS_END;
-			case AGILITY:
-				return VarPlayerID.XPDROPS_AGILITY_END;
-			case STRENGTH:
-				return VarPlayerID.XPDROPS_STRENGTH_END;
-			case PRAYER:
-				return VarPlayerID.XPDROPS_PRAYER_END;
-			case SLAYER:
-				return VarPlayerID.XPDROPS_SLAYER_END;
-			case FISHING:
-				return VarPlayerID.XPDROPS_FISHING_END;
-			case RUNECRAFT:
-				return VarPlayerID.XPDROPS_RUNECRAFT_END;
-			case HERBLORE:
-				return VarPlayerID.XPDROPS_HERBLORE_END;
-			case FIREMAKING:
-				return VarPlayerID.XPDROPS_FIREMAKING_END;
-			case CONSTRUCTION:
-				return VarPlayerID.XPDROPS_CONSTRUCTION_END;
-			case HUNTER:
-				return VarPlayerID.XPDROPS_HUNTER_END;
-			case COOKING:
-				return VarPlayerID.XPDROPS_COOKING_END;
-			case FARMING:
-				return VarPlayerID.XPDROPS_FARMING_END;
-			case CRAFTING:
-				return VarPlayerID.XPDROPS_CRAFTING_END;
-			case SMITHING:
-				return VarPlayerID.XPDROPS_SMITHING_END;
-			case THIEVING:
-				return VarPlayerID.XPDROPS_THIEVING_END;
-			case FLETCHING:
-				return VarPlayerID.XPDROPS_FLETCHING_END;
-			default:
-				throw new IllegalArgumentException();
-		}
-	}
-
 	@Schedule(
 		period = 1,
 		unit = ChronoUnit.SECONDS
 	)
 	public void tickSkillTimes()
 	{
+		// Ensure XP state is initialized
+		if (xpState == null)
+		{
+			xpState = new XpState();
+			log.debug("Created new XP state in tickSkillTimes");
+
+			// Also try to restore saved state
+			if (timeToMaxConfig.saveState())
+			{
+				XpSave save = loadSaveState(configManager.getRSProfileKey());
+				if (save != null)
+				{
+					log.debug("Restoring saved XP state in tickSkillTimes");
+					xpState.restore(save);
+				}
+			}
+		}
+
 		int pauseSkillAfter = timeToMaxConfig.pauseSkillAfter();
 		// Adjust unpause states
 		for (Skill skill : Skill.values())
@@ -822,10 +698,18 @@ public class TimeToMaxPlugin extends Plugin
 	)
 	public void tickStateSave()
 	{
+		if (xpState == null)
+		{
+			log.debug("Cannot save XP state: xpState is null");
+			return;
+		}
+
 		XpSave save = xpState.save();
 		if (save != null)
 		{
-			saveSaveState(configManager.getRSProfileKey(), save);
+			String profile = configManager.getRSProfileKey();
+			saveSaveState(profile, save);
+			log.debug("Saved XP state for profile: {}", profile);
 		}
 	}
 
@@ -891,18 +775,6 @@ public class TimeToMaxPlugin extends Plugin
 
 	private XpSave loadSaveState(String profile)
 	{
-		if (profile == null || profile.isEmpty())
-		{
-			return null;
-		}
-		try
-		{
-			return configManager.getConfiguration("timeToMax", profile, "state", XpSave.class);
-		}
-		catch (Exception e)
-		{
-			log.warn("Failed to load XP state", e);
-			return null;
-		}
+		return configManager.getConfiguration("timeToMax", profile, "state", XpSave.class);
 	}
 }

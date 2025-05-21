@@ -51,7 +51,6 @@ import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 import lombok.AccessLevel;
 import lombok.Getter;
-import net.runelite.api.Client;
 import net.runelite.api.Experience;
 import net.runelite.api.Skill;
 import net.runelite.client.game.SkillIconManager;
@@ -62,7 +61,6 @@ import net.runelite.client.ui.SkillColor;
 import net.runelite.client.ui.components.MouseDragEventForwarder;
 import net.runelite.client.ui.components.ProgressBar;
 import net.runelite.client.util.ColorUtil;
-import net.runelite.client.util.LinkBrowser;
 import net.runelite.client.util.QuantityFormatter;
 
 class XpInfoBox extends JPanel
@@ -125,7 +123,7 @@ class XpInfoBox extends JPanel
 
 	private boolean paused = false;
 
-	XpInfoBox(TimeToMaxPlugin timeToMaxPlugin, TimeToMaxConfig timeToMaxConfig, Client client, JComponent panel, Skill skill, SkillIconManager iconManager)
+	XpInfoBox(TimeToMaxPlugin timeToMaxPlugin, TimeToMaxConfig timeToMaxConfig, JComponent panel, Skill skill, SkillIconManager iconManager)
 	{
 		this.timeToMaxConfig = timeToMaxConfig;
 		this.panel = panel;
@@ -266,27 +264,14 @@ class XpInfoBox extends JPanel
 		progressBar.addMouseListener(clickToggleCompact);
 
 		add(container, BorderLayout.NORTH);
-	}	void reset()
+	}
+
+	void reset()
 	{
 		canvasItem.setText(ADD_STATE);
 		setCompactView(false);
-		
-		// Reset stats to zero but keep labels
-		topLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel1().getKey() + ": ", 0));
-		bottomLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel3().getKey() + ": ", 0));
-		topRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel2().getKey() + ": ", 0));
-		bottomRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel4().getKey() + ": ", 0));
-		//targetXpStat.setText(htmlLabel("Target " + timeToMaxConfig.trackingInterval().toString().toLowerCase() + ": ", "0/0 (0%)"));
-		
-		// Reset progress bar
-		progressBar.setValue(0);
-		progressBar.setCenterLabel("0%");
-		progressBar.setLeftLabel("0%");
-		progressBar.setRightLabel("100%");
-		progressBar.setDimmed(false);
-		
-		revalidate();
-		repaint();
+		panel.remove(this);
+		panel.revalidate();
 	}
 
 	void update(boolean updated, boolean paused, XpSnapshotSingle xpSnapshotSingle)
@@ -349,10 +334,11 @@ class XpInfoBox extends JPanel
 			}
 
 			int currentXp = xpSnapshotSingle.getEndGoalXp() - xpSnapshotSingle.getXpRemainingToGoal();
+			int goalStartXp = xpSnapshotSingle.getStartGoalXp();
 
 			// Get target tracking values
 			int targetXpGained = XpCalculator.getTargetXpGained(skill, currentXp);
-			int requiredXp = XpCalculator.getRequiredXpPerInterval(currentXp, targetDate, interval);
+			int requiredXp = XpCalculator.getRequiredXpPerInterval(goalStartXp, targetDate, interval);
 			int targetProgress = requiredXp > 0 ? Math.min(100, (int) ((double) targetXpGained / requiredXp * 100)) : 0;
 
 			// Update progress bar based on selected mode
@@ -427,12 +413,69 @@ class XpInfoBox extends JPanel
 			}
 
 			progressBar.setDimmed(skillPaused);
-
 			// Update XP panel labels
 			topLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel1(), xpSnapshotSingle));
-			topRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel2(), xpSnapshotSingle));
-			bottomLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel3(), xpSnapshotSingle));
-			bottomRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel4(), xpSnapshotSingle));
+
+			// For the XP_LEFT label, show remaining XP needed for this interval,
+			// decreasing as player gains XP toward their target
+			if (timeToMaxConfig.xpPanelLabel2() == XpPanelLabel.XP_LEFT)
+			{
+				String key = XpPanelLabel.XP_LEFT.getKey() + ": ";
+				// Calculate remaining XP needed for this interval by subtracting gained XP from required XP
+				int remainingXpForInterval = Math.max(0, requiredXp - targetXpGained);
+				String value = QuantityFormatter.quantityToRSDecimalStack(remainingXpForInterval, true);
+				topRightStat.setText(htmlLabel(key, value));
+			}
+			else
+			{
+				topRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel2(), xpSnapshotSingle));
+			}			// For XP_GAINED label, we should always show the same value that appears in the tooltip
+			// This ensures consistency between the main display and tooltip
+			if (timeToMaxConfig.xpPanelLabel1() == XpPanelLabel.XP_GAINED || 
+				timeToMaxConfig.xpPanelLabel2() == XpPanelLabel.XP_GAINED ||
+				timeToMaxConfig.xpPanelLabel3() == XpPanelLabel.XP_GAINED || 
+				timeToMaxConfig.xpPanelLabel4() == XpPanelLabel.XP_GAINED)
+			{
+				// Get the HTML label key
+				String key = XpPanelLabel.XP_GAINED.getKey() + ": ";
+				
+				// Always use the interval XP gained value to be consistent with the tooltip
+				// This is the source of the inconsistency - we now always use targetXpGained
+				int xpToShow = targetXpGained;
+				
+				String value = QuantityFormatter.quantityToRSDecimalStack(xpToShow, true);
+				
+				// Update all labels that are configured to show XP gained
+				if (timeToMaxConfig.xpPanelLabel1() == XpPanelLabel.XP_GAINED) {
+					topLeftStat.setText(htmlLabel(key, value));
+				}
+				
+				if (timeToMaxConfig.xpPanelLabel2() == XpPanelLabel.XP_GAINED) {
+					topRightStat.setText(htmlLabel(key, value));
+				}
+				
+				if (timeToMaxConfig.xpPanelLabel3() == XpPanelLabel.XP_GAINED) {
+					bottomLeftStat.setText(htmlLabel(key, value));
+				} else {
+					// Apply standard label
+					bottomLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel3(), xpSnapshotSingle));
+				}
+				
+				if (timeToMaxConfig.xpPanelLabel4() == XpPanelLabel.XP_GAINED) {
+					bottomRightStat.setText(htmlLabel(key, value));
+				} else {
+					// Apply standard label
+					bottomRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel4(), xpSnapshotSingle));
+				}
+			}
+			else
+			{
+				// Default behavior for other label types
+				topLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel1(), xpSnapshotSingle));
+				topRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel2(), xpSnapshotSingle));
+				bottomLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel3(), xpSnapshotSingle));
+				bottomRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel4(), xpSnapshotSingle));
+			}
 
 			// Update target XP label
 			//targetXpStat.setText(htmlLabel("Target " + interval.toString().toLowerCase() + ": ",

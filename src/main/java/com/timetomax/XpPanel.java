@@ -31,7 +31,6 @@ import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import javax.swing.BoxLayout;
 import javax.swing.ImageIcon;
 import javax.swing.JComponent;
@@ -41,12 +40,8 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
-import javax.swing.event.PopupMenuEvent;
-import javax.swing.event.PopupMenuListener;
-import net.runelite.api.Actor;
 import net.runelite.api.Client;
 import net.runelite.api.Skill;
-import net.runelite.api.WorldType;
 import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
@@ -54,9 +49,6 @@ import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.ui.components.DragAndDropReorderPane;
 import net.runelite.client.ui.components.PluginErrorPanel;
 import net.runelite.client.util.ImageUtil;
-import net.runelite.client.util.LinkBrowser;
-import net.runelite.client.util.QuantityFormatter;
-import okhttp3.HttpUrl;
 
 class XpPanel extends PluginPanel
 {
@@ -159,7 +151,7 @@ class XpPanel extends PluginPanel
 
 		for (Skill skill : Skill.values())
 		{
-			infoBoxes.put(skill, new XpInfoBox(timeToMaxPlugin, timeToMaxConfig, client, infoBoxPanel, skill, iconManager));
+			infoBoxes.put(skill, new XpInfoBox(timeToMaxPlugin, timeToMaxConfig, infoBoxPanel, skill, iconManager));
 		}
 
 		errorPanel.setContent("Time To Max", "Log in and view and track the minimum xp required to meet your maxing goal.");
@@ -174,19 +166,6 @@ class XpPanel extends PluginPanel
 		// Reset overall panel stats
 		overallExpGained.setText(XpInfoBox.htmlLabel("Gained: ", 0));
 		overallExpHour.setText(XpInfoBox.htmlLabel("Per hour: ", 0));
-		
-		// Force a UI refresh
-		SwingUtilities.invokeLater(() -> {
-			revalidate();
-			repaint();
-		});
-	}
-
-	void resetSkill(Skill skill)
-	{
-		// Just reset the skill's infobox without removing it
-		final XpInfoBox xpInfoBox = infoBoxes.get(skill);
-		xpInfoBox.reset();
 		
 		// Force a UI refresh
 		SwingUtilities.invokeLater(() -> {
