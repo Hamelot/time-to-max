@@ -49,6 +49,7 @@ public class XpCalculator
 				return true;
 		}
 	}
+
 	/**
 	 * Records the starting XP for target tracking and updates period tracking
 	 *
@@ -73,7 +74,7 @@ public class XpCalculator
 		{
 			targetStartXp.put(skill, Math.max(0, currentXp)); // Initialize tracking
 			periodStartDates.put(skill, LocalDate.now());
-			
+
 			// Cache the XP per day value for consistency
 			int xpPerDay = getRequiredXpPerDay(currentXp, targetDate);
 			cachedXpPerDay.put(skill, xpPerDay);
@@ -101,10 +102,11 @@ public class XpCalculator
 		}
 		return Math.max(0, currentXp - startXp);
 	}
+
 	/**
 	 * Get the required XP per day to reach max level by the target date
 	 *
-	 * @param startXp  Start XP in the skill
+	 * @param startXp    Start XP in the skill
 	 * @param targetDate Target date to reach max level
 	 * @return XP required per day
 	 */
@@ -124,12 +126,12 @@ public class XpCalculator
 
 		return (int) Math.ceil((double) xpRemaining / daysUntilTarget);
 	}
-	
+
 	/**
 	 * Get the required XP per day, with caching to ensure consistency
-	 * 
-	 * @param skill The skill to get XP per day for
-	 * @param startXp Start XP in the skill
+	 *
+	 * @param skill      The skill to get XP per day for
+	 * @param startXp    Start XP in the skill
 	 * @param targetDate Target date to reach max level
 	 * @return XP required per day
 	 */
@@ -140,16 +142,17 @@ public class XpCalculator
 		{
 			return cachedXpPerDay.get(skill);
 		}
-		
+
 		// Calculate and cache the value
 		int xpPerDay = getRequiredXpPerDay(startXp, targetDate);
 		cachedXpPerDay.put(skill, xpPerDay);
 		return xpPerDay;
 	}
+
 	/**
 	 * Get the required XP per interval to reach max level by the target date
 	 *
-	 * @param startXp  Start XP in the skill
+	 * @param startXp    Start XP in the skill
 	 * @param targetDate Target date to reach max level
 	 * @param interval   The interval (day, week, month)
 	 * @return XP required per interval
@@ -168,14 +171,14 @@ public class XpCalculator
 				return xpPerDay;
 		}
 	}
-	
+
 	/**
 	 * Get the required XP per interval using cached daily XP values
 	 *
-	 * @param skill The skill to get XP for
-	 * @param startXp Start XP in the skill
+	 * @param skill      The skill to get XP for
+	 * @param startXp    Start XP in the skill
 	 * @param targetDate Target date to reach max level
-	 * @param interval The interval (day, week, month)
+	 * @param interval   The interval (day, week, month)
 	 * @return XP required per interval
 	 */
 	public static int getRequiredXpPerIntervalCached(Skill skill, int startXp, LocalDate targetDate, TrackingInterval interval)
@@ -206,6 +209,7 @@ public class XpCalculator
 		}
 		return startXp;
 	}
+
 	/**
 	 * Clear target tracking data for a skill or all skills
 	 *

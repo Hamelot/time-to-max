@@ -110,7 +110,7 @@ class XpPanel extends PluginPanel
 		popupMenu.add(resetPerHour);
 		popupMenu.add(pauseAll);
 		popupMenu.add(unpauseAll);
-		
+
 		overallPanel.setComponentPopupMenu(popupMenu);
 
 		final JLabel overallIcon = new JLabel(new ImageIcon(ImageUtil.loadImageResource(getClass(), "/skill_icons/overall.png")));
@@ -166,7 +166,7 @@ class XpPanel extends PluginPanel
 		// Reset overall panel stats
 		overallExpGained.setText(XpInfoBox.htmlLabel("Gained: ", 0));
 		overallExpHour.setText(XpInfoBox.htmlLabel("Per hour: ", 0));
-		
+
 		// Force a UI refresh
 		SwingUtilities.invokeLater(() -> {
 			revalidate();

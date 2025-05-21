@@ -64,7 +64,7 @@ class XpStateSingle
 		this.startXp = startXp;
 		this.endLevelExp = XpCalculator.MAX_XP; // Initialize to MAX_XP by default
 	}
-	
+
 	long getCurrentXp()
 	{
 		return startXp + getTotalXpGained();
@@ -84,6 +84,7 @@ class XpStateSingle
 	{
 		return (int) ((1.0 / (getTimeElapsedInSeconds() / 3600.0)) * value);
 	}
+
 	private long getTimeElapsedInSeconds()
 	{
 		// If the skill started just now, we can divide by near zero, this results in odd behavior.
@@ -92,6 +93,7 @@ class XpStateSingle
 		// but it isn't ridiculous like saying 2 billion XP per hour.
 		return Math.max(60, skillTime / 1000);
 	}
+
 	private int getXpRemaining()
 	{
 		// For properly configured goal-based tracking
@@ -100,7 +102,7 @@ class XpStateSingle
 			// Return XP remaining to max level
 			return Math.max(0, XpCalculator.MAX_XP - (int) getCurrentXp());
 		}
-		
+
 		// Return XP remaining to the next level or configured goal
 		return Math.max(0, endLevelExp - (int) getCurrentXp());
 	}
@@ -263,7 +265,7 @@ class XpStateSingle
 	void updateGoals(long currentXp, int goalStartXp, int goalEndXp)
 	{
 		int currentLevel = Experience.getLevelForXp((int) currentXp);
-		
+
 		// On initial setup or reset, use the current level's base XP
 		startLevelExp = (goalStartXp < 0 || currentXp > (goalEndXp + startXp))
 			? Experience.getXpForLevel(currentLevel)  // XP required for current level
@@ -288,7 +290,7 @@ class XpStateSingle
 		{
 			endLevelExp = goalEndXp;
 		}
-		
+
 		// Ensure the endLevelExp is always greater than or equal to currentXp
 		// This prevents negative XP remaining values
 		if (endLevelExp < currentXp)
@@ -326,6 +328,7 @@ class XpStateSingle
 			.endGoalXp(endLevelExp)
 			.build();
 	}
+
 	XpSaveSingle save()
 	{
 		XpSaveSingle save = new XpSaveSingle();

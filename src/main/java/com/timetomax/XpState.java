@@ -135,6 +135,7 @@ class XpState
 			}
 		}
 	}
+
 	/**
 	 * Forcefully initialize a skill with a known start XP from the current XP.
 	 * This is used in resetAndInitState by the plugin. It should not result in showing the XP in the UI.
@@ -146,7 +147,7 @@ class XpState
 	{
 		XpStateSingle state = new XpStateSingle(currentXp);
 		// Initialize the end goal to MAX_XP so XP Left shows the correct value from the start
-		state.updateGoals(currentXp, (int)currentXp, XpCalculator.MAX_XP);
+		state.updateGoals(currentXp, (int) currentXp, XpCalculator.MAX_XP);
 		xpSkills.put(skill, state);
 	}
 

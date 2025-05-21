@@ -470,7 +470,8 @@ public class TimeToMaxPlugin extends Plugin
 				if (timeToMaxConfig.saveState() && (save = loadSaveState(configManager.getRSProfileKey())) != null)
 				{
 					log.debug("Loading xp state from save");
-					xpState.restore(save);					for (Skill skill : save.skills.keySet())
+					xpState.restore(save);
+					for (Skill skill : save.skills.keySet())
 					{
 						final int startGoalXp = XpCalculator.getTargetStartXp(skill);
 						final int endGoalXp = XpCalculator.getRequiredXpPerIntervalCached(skill, startGoalXp, LocalDate.parse(timeToMaxConfig.targetDate()), timeToMaxConfig.trackingInterval());
@@ -555,7 +556,7 @@ public class TimeToMaxPlugin extends Plugin
 				// For skill state, we want to initialize with the current XP
 				// but adjust for interval tracking
 				int currentXpValue = client.getSkillExperience(skill);
-				int startGoalXp = XpCalculator.getTargetStartXp(skill);				// Initialize tracking for the skill with the current XP as baseline
+				int startGoalXp = XpCalculator.getTargetStartXp(skill);                // Initialize tracking for the skill with the current XP as baseline
 				// This ensures correct interval tracking from the start
 				XpCalculator.recordTargetStartXp(skill, currentXpValue, targetDate, interval);
 				// Use cached interval calculation for consistency

@@ -429,41 +429,49 @@ class XpInfoBox extends JPanel
 			else
 			{
 				topRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel2(), xpSnapshotSingle));
-			}			// For XP_GAINED label, we should always show the same value that appears in the tooltip
+			}            // For XP_GAINED label, we should always show the same value that appears in the tooltip
 			// This ensures consistency between the main display and tooltip
-			if (timeToMaxConfig.xpPanelLabel1() == XpPanelLabel.XP_GAINED || 
+			if (timeToMaxConfig.xpPanelLabel1() == XpPanelLabel.XP_GAINED ||
 				timeToMaxConfig.xpPanelLabel2() == XpPanelLabel.XP_GAINED ||
-				timeToMaxConfig.xpPanelLabel3() == XpPanelLabel.XP_GAINED || 
+				timeToMaxConfig.xpPanelLabel3() == XpPanelLabel.XP_GAINED ||
 				timeToMaxConfig.xpPanelLabel4() == XpPanelLabel.XP_GAINED)
 			{
 				// Get the HTML label key
 				String key = XpPanelLabel.XP_GAINED.getKey() + ": ";
-				
+
 				// Always use the interval XP gained value to be consistent with the tooltip
 				// This is the source of the inconsistency - we now always use targetXpGained
 				int xpToShow = targetXpGained;
-				
+
 				String value = QuantityFormatter.quantityToRSDecimalStack(xpToShow, true);
-				
+
 				// Update all labels that are configured to show XP gained
-				if (timeToMaxConfig.xpPanelLabel1() == XpPanelLabel.XP_GAINED) {
+				if (timeToMaxConfig.xpPanelLabel1() == XpPanelLabel.XP_GAINED)
+				{
 					topLeftStat.setText(htmlLabel(key, value));
 				}
-				
-				if (timeToMaxConfig.xpPanelLabel2() == XpPanelLabel.XP_GAINED) {
+
+				if (timeToMaxConfig.xpPanelLabel2() == XpPanelLabel.XP_GAINED)
+				{
 					topRightStat.setText(htmlLabel(key, value));
 				}
-				
-				if (timeToMaxConfig.xpPanelLabel3() == XpPanelLabel.XP_GAINED) {
+
+				if (timeToMaxConfig.xpPanelLabel3() == XpPanelLabel.XP_GAINED)
+				{
 					bottomLeftStat.setText(htmlLabel(key, value));
-				} else {
+				}
+				else
+				{
 					// Apply standard label
 					bottomLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel3(), xpSnapshotSingle));
 				}
-				
-				if (timeToMaxConfig.xpPanelLabel4() == XpPanelLabel.XP_GAINED) {
+
+				if (timeToMaxConfig.xpPanelLabel4() == XpPanelLabel.XP_GAINED)
+				{
 					bottomRightStat.setText(htmlLabel(key, value));
-				} else {
+				}
+				else
+				{
 					// Apply standard label
 					bottomRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel4(), xpSnapshotSingle));
 				}
