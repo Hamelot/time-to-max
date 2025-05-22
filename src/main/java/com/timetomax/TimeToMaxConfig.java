@@ -76,28 +76,6 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		section = targetSection,
-		position = 2,
-		keyName = "progressBarMode",
-		name = "Progress Bar Mode",
-		description = "Display mode for progress bars (level progress or target progress)"
-	)
-	default ProgressBarMode progressBarMode()
-	{
-		return ProgressBarMode.TARGET;
-	}
-
-	@ConfigItem(
-		keyName = "saveState",
-		name = "Save between sessions",
-		description = "Saves xp trackers between sessions."
-	)
-	default boolean saveState()
-	{
-		return true;
-	}
-
-	@ConfigItem(
 		position = 0,
 		keyName = "logoutPausing",
 		name = "Pause on logout",

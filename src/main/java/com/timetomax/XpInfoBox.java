@@ -341,47 +341,21 @@ class XpInfoBox extends JPanel
 			int requiredXp = XpCalculator.getRequiredXpPerInterval(goalStartXp, targetDate, interval);
 			int targetProgress = requiredXp > 0 ? Math.min(100, (int) ((double) targetXpGained / requiredXp * 100)) : 0;
 
-			// Update progress bar based on selected mode
-			if (timeToMaxConfig.progressBarMode() == ProgressBarMode.TARGET)
-			{
-				// Target progress mode - use period tracking
-				progressBar.setValue(targetProgress);
-				progressBar.setLeftLabel("");
-				progressBar.setRightLabel(QuantityFormatter.quantityToRSDecimalStack(requiredXp, true));
-				progressBar.setPositions(Collections.emptyList());
+			// Target progress mode - use period tracking
+			progressBar.setValue(targetProgress);
+			progressBar.setLeftLabel("");
+			progressBar.setRightLabel(QuantityFormatter.quantityToRSDecimalStack(requiredXp, true));
+			progressBar.setPositions(Collections.emptyList());
 
-				// Set center label based on completion status
-				if (targetProgress >= 100)
-				{
-					progressBar.setCenterLabel("Complete");
-				}
-				else
-				{
-					String progress = String.format("%d%%", targetProgress);
-					progressBar.setCenterLabel(progress);
-				}
+			// Set center label based on completion status
+			if (targetProgress >= 100)
+			{
+				progressBar.setCenterLabel("Complete");
 			}
 			else
 			{
-				// Level progress mode
-				int levelProgress = (int) xpSnapshotSingle.getSkillProgressToGoal();
-				progressBar.setValue(levelProgress);
-				progressBar.setLeftLabel(String.valueOf(xpSnapshotSingle.getStartLevel()));
-				progressBar.setRightLabel(String.valueOf(xpSnapshotSingle.getEndLevel()));
-				progressBar.setCenterLabel(levelProgress + "%");
-
-				// Set level marker positions
-				if (xpSnapshotSingle.getStartLevel() != xpSnapshotSingle.getEndLevel()
-					&& xpSnapshotSingle.getEndLevel() - xpSnapshotSingle.getStartLevel() > 1)
-				{
-					List<Integer> positions = new ArrayList<>();
-					int level = xpSnapshotSingle.getStartLevel() + 1;
-					double relativeStartExperience = Experience.getXpForLevel(level) - xpSnapshotSingle.getStartGoalXp();
-					double relativeRequiredExperience = xpSnapshotSingle.getEndGoalXp() - xpSnapshotSingle.getStartGoalXp();
-					int position = (int) (100.0 * relativeStartExperience / relativeRequiredExperience);
-					positions.add(position);
-					progressBar.setPositions(positions);
-				}
+				String progress = String.format("%d%%", targetProgress);
+				progressBar.setCenterLabel(progress);
 			}
 
 			// Prepare tooltip text

@@ -86,10 +86,6 @@ class XpPanel extends PluginPanel
 		overallPanel.setLayout(new BorderLayout());
 		overallPanel.setVisible(true);
 
-		// Create reset all menu
-		final JMenuItem reset = new JMenuItem("Reset All");
-		reset.addActionListener(e -> timeToMaxPlugin.resetAndInitState());
-
 		// Create reset all per hour menu
 		final JMenuItem resetPerHour = new JMenuItem("Reset All/hr");
 		resetPerHour.addActionListener(e -> timeToMaxPlugin.resetAllSkillsPerHourState());
@@ -106,7 +102,6 @@ class XpPanel extends PluginPanel
 		// Create popup menu
 		final JPopupMenu popupMenu = new JPopupMenu();
 		popupMenu.setBorder(new EmptyBorder(5, 5, 5, 5));
-		popupMenu.add(reset);
 		popupMenu.add(resetPerHour);
 		popupMenu.add(pauseAll);
 		popupMenu.add(unpauseAll);
@@ -213,9 +208,6 @@ class XpPanel extends PluginPanel
 
 			targetDateLabel.setText(XpInfoBox.htmlLabel("Target Date: ", targetDate.toString()));
 			targetIntervalLabel.setText(XpInfoBox.htmlLabel("Tracking: ", "Per " + interval.toString().toLowerCase()));
-
-			// Calculate required XP per interval for max level (assuming starting from 0)
-			int requiredXp = XpCalculator.getRequiredXpPerInterval(0, targetDate, interval);
 
 			targetPanel.setVisible(true);
 			targetPanel.revalidate();

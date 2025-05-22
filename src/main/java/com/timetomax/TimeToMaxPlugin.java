@@ -45,13 +45,11 @@ import net.runelite.api.MenuAction;
 import net.runelite.api.Player;
 import net.runelite.api.Skill;
 import net.runelite.api.WorldType;
-import net.runelite.api.annotations.Varp;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.MenuEntryAdded;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.gameval.InterfaceID;
-import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.widgets.WidgetUtil;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -159,25 +157,16 @@ public class TimeToMaxPlugin extends Plugin
 				lastAccount = client.getAccountHash();
 				lastWorldType = worldSetToType(client.getWorldType());
 
-				// Try to restore saved state
-				if (timeToMaxConfig.saveState())
+				XpSave save = loadSaveState(configManager.getRSProfileKey());
+				if (save != null)
 				{
-					XpSave save = loadSaveState(configManager.getRSProfileKey());
-					if (save != null)
-					{
-						log.debug("Loading xp state from save");
-						xpState.restore(save);
+					log.debug("Loading xp state from save");
+					xpState.restore(save);
 
-						// Update UI with restored data
-						rebuildSkills();
-					}
-					// Even if no save exists, initialize from current XP
-					else
-					{
-						resetAndInitState();
-					}
+					// Update UI with restored data
+					rebuildSkills();
 				}
-				// If not saving state, initialize from current XP
+				// Even if no save exists, initialize from current XP
 				else
 				{
 					resetAndInitState();
@@ -324,15 +313,16 @@ public class TimeToMaxPlugin extends Plugin
 	 */
 	void resetAndInitState()
 	{
+		clearSaveState(configManager.getRSProfileKey());
+		resetState();
+
 		for (Skill skill : Skill.values())
 		{
-			resetSkillState(skill);
-			XpCalculator.clearTargetTracking(skill);
-			xpState.unInitializeSkill(skill);
+			long currentXp = client.getSkillExperience(skill);
+			xpState.initializeSkill(skill, currentXp);
+			removeOverlay(skill);
 		}
 
-		initializeTracker = 1;
-		initializeNonMaxedSkills();
 		xpState.initializeOverall(client.getOverallExperience());
 	}
 
@@ -467,7 +457,7 @@ public class TimeToMaxPlugin extends Plugin
 			clientThread.invokeLater(() -> {
 				XpSave save;
 				// Restore from saved state
-				if (timeToMaxConfig.saveState() && (save = loadSaveState(configManager.getRSProfileKey())) != null)
+				if ((save = loadSaveState(configManager.getRSProfileKey())) != null)
 				{
 					log.debug("Loading xp state from save");
 					xpState.restore(save);
@@ -644,14 +634,11 @@ public class TimeToMaxPlugin extends Plugin
 			log.debug("Created new XP state in tickSkillTimes");
 
 			// Also try to restore saved state
-			if (timeToMaxConfig.saveState())
+			XpSave save = loadSaveState(configManager.getRSProfileKey());
+			if (save != null)
 			{
-				XpSave save = loadSaveState(configManager.getRSProfileKey());
-				if (save != null)
-				{
-					log.debug("Restoring saved XP state in tickSkillTimes");
-					xpState.restore(save);
-				}
+				log.debug("Restoring saved XP state in tickSkillTimes");
+				xpState.restore(save);
 			}
 		}
 
