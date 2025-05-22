@@ -38,6 +38,7 @@ import javax.inject.Inject;
 import lombok.AccessLevel;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.Experience;
 import net.runelite.api.GameState;
@@ -45,6 +46,8 @@ import net.runelite.api.MenuAction;
 import net.runelite.api.Player;
 import net.runelite.api.Skill;
 import net.runelite.api.WorldType;
+import net.runelite.api.events.ChatMessage;
+import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.MenuEntryAdded;
@@ -52,6 +55,7 @@ import net.runelite.api.events.StatChanged;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.WidgetUtil;
 import net.runelite.client.callback.ClientThread;
+import net.runelite.client.chat.ChatCommandManager;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ClientShutdown;
@@ -95,6 +99,9 @@ public class TimeToMaxPlugin extends Plugin
 
 	@Inject
 	private OverlayManager overlayManager;
+
+	@Inject
+	private ChatCommandManager chatCommandManager;
 
 	@Inject
 	private XpState xpState;
@@ -157,13 +164,14 @@ public class TimeToMaxPlugin extends Plugin
 			}
 		});
 	}
-
+	
 	@Override
 	protected void shutDown() throws Exception
 	{
 		overlayManager.removeIf(e -> e instanceof XpInfoBoxOverlay);
 		xpState.reset();
 		clientToolbar.removeNavigation(navButton);
+		chatCommandManager.unregisterCommand("ttmreset");
 	}
 
 	@Subscribe
@@ -366,7 +374,6 @@ public class TimeToMaxPlugin extends Plugin
 		xpState.resetOverallPerHour();
 	}
 
-	// TODO: clean this method up
 	@Subscribe
 	public void onStatChanged(StatChanged statChanged)
 	{
@@ -436,30 +443,27 @@ public class TimeToMaxPlugin extends Plugin
 
 				}
 
-				// Initialize all non-maxed skills
-				initializeNonMaxedSkills();
-
-				// Initialize the tracker with the initial xp if not already initialized
-				for (Skill skill : Skill.values())
-				{
-					if (!xpState.isInitialized(skill))
-					{
-						final int currentXp = client.getSkillExperience(skill);
-						// goal exps are not necessary for skill initialization
-						XpUpdateResult xpUpdateResult = xpState.updateSkill(skill, currentXp, -1, -1);
-						assert xpUpdateResult == XpUpdateResult.INITIALIZED;
-					}
-				}
-
 				// apply state to the panel
 				for (Skill skill : save.skills.keySet())
 				{
 					xpPanel.updateSkillExperience(true, false, skill, xpState.getSkillSnapshot(skill));
 				}
-				xpPanel.updateTotal(xpState.getTotalSnapshot());
 			}
 
+			// Initialize all non-maxed skills
+			initializeNonMaxedSkills();
 
+			// Initialize the tracker with the initial xp if not already initialized
+			for (Skill skill : Skill.values())
+			{
+				if (!xpState.isInitialized(skill))
+				{
+					final int currentXp = client.getSkillExperience(skill);
+					// goal exps are not necessary for skill initialization
+					XpUpdateResult xpUpdateResult = xpState.updateSkill(skill, currentXp, -1, -1);
+					assert xpUpdateResult == XpUpdateResult.INITIALIZED;
+				}
+			}
 
 			// Check for xp gained while logged out
 			for (Skill skill : Skill.values())
@@ -502,6 +506,8 @@ public class TimeToMaxPlugin extends Plugin
 			lastXp = client.getOverallExperience();
 			fetchXp = false;
 		}
+
+		xpPanel.updateTotal(xpState.getTotalSnapshot());
 	}
 
 	private void initializeNonMaxedSkills()
@@ -562,6 +568,16 @@ public class TimeToMaxPlugin extends Plugin
 					addOverlay(skill);
 				}
 			});
+	}
+
+	@Subscribe
+	public void onCommandExecuted(CommandExecuted commandExecuted)
+	{
+		if (commandExecuted.getCommand().equals("ttmreset"))
+		{
+			handleTTMReset();
+			initializeNonMaxedSkills();
+		}
 	}
 
 	XpStateSingle getSkillState(Skill skill)
@@ -718,5 +734,13 @@ public class TimeToMaxPlugin extends Plugin
 	private XpSave loadSaveState(String profile)
 	{
 		return configManager.getConfiguration("timeToMax", profile, "state", XpSave.class);
+	}
+
+	private void handleTTMReset()
+	{
+		log.info("TTM Reset command triggered");
+		resetState();
+		initializeTracker = 1;
+		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "TTM has been reset.", null);
 	}
 }
