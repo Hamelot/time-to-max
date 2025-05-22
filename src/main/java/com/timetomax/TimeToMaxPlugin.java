@@ -34,6 +34,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.EnumSet;
+import java.util.Iterator;
 import javax.inject.Inject;
 import lombok.AccessLevel;
 import lombok.Setter;
@@ -379,6 +380,13 @@ public class TimeToMaxPlugin extends Plugin
 	{
 		final Skill skill = statChanged.getSkill();
 		final int currentXp = statChanged.getXp();
+		final int currentLevel = Experience.getLevelForXp(currentXp);
+
+		// Skip processing for skills that are already maxed
+		if (currentLevel >= Experience.MAX_REAL_LEVEL)
+		{
+			return;
+		}
 
 		// Get target date and interval from config
 		LocalDate targetDate;
@@ -432,15 +440,29 @@ public class TimeToMaxPlugin extends Plugin
 				log.debug("Loading xp state from save");
 				xpState.restore(save);
 
-				for (Skill skill : save.skills.keySet())
+				// Filter out skills that are already maxed
+				Iterator<Skill> skillIterator = save.skills.keySet().iterator();
+				while (skillIterator.hasNext()) 
 				{
+					Skill skill = skillIterator.next();
+					final int currentXp = client.getSkillExperience(skill);
+					final int currentLevel = Experience.getLevelForXp(currentXp);
+					
+					// Remove maxed skills from tracking
+					if (currentLevel >= Experience.MAX_REAL_LEVEL) 
+					{
+						skillIterator.remove();
+						xpState.unInitializeSkill(skill);
+						log.debug("Removed maxed skill from tracking: {}", skill.getName());
+						continue;
+					}
+					
 					final int startGoalXp = (int)save.skills.get(skill).startXp;
 					final int endGoalXp = startGoalXp + XpCalculator.getRequiredXpPerInterval(startGoalXp, LocalDate.parse(timeToMaxConfig.targetDate()), timeToMaxConfig.trackingInterval());
 
 					XpStateSingle x = xpState.getSkill(skill);
 					xpState.updateSkill(skill, x.getCurrentXp(), startGoalXp, endGoalXp);
 					x.updateGoals(x.getCurrentXp(), startGoalXp, endGoalXp);
-
 				}
 
 				// apply state to the panel
@@ -526,6 +548,14 @@ public class TimeToMaxPlugin extends Plugin
 				x.updateGoals(x.getCurrentXp(), currentXp, endGoalXp);
 
 				xpPanel.updateSkillExperience(true, false, skill, xpState.getSkillSnapshot(skill));
+				// Remove any existing tracking for maxed skills
+			}
+			else if (currentLevel >= Experience.MAX_REAL_LEVEL && xpState.isInitialized(skill))
+			{
+				xpState.unInitializeSkill(skill);
+				xpPanel.resetSkill(skill);
+				removeOverlay(skill);
+				log.debug("Removed tracking for maxed skill: {}", skill.getName());
 			}
 		}
 	}
@@ -544,8 +574,7 @@ public class TimeToMaxPlugin extends Plugin
 
 		// Get skill from menu option, eg. "View <col=ff981f>Attack</col> guide"
 		final String skillText = event.getOption().split(" ")[1];
-		final Skill skill;
-		try
+		final Skill skill;		try
 		{
 			skill = Skill.valueOf(Text.removeTags(skillText).toUpperCase());
 		}
