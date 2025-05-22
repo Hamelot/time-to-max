@@ -52,7 +52,6 @@ import net.runelite.client.util.ImageUtil;
 
 class XpPanel extends PluginPanel
 {
-	private final Client client;
 	private final Map<Skill, XpInfoBox> infoBoxes = new HashMap<>();
 	private final JLabel overallExpGained = new JLabel(XpInfoBox.htmlLabel("Gained: ", 0));
 	private final JLabel overallExpHour = new JLabel(XpInfoBox.htmlLabel("Per hour: ", 0));
@@ -70,7 +69,6 @@ class XpPanel extends PluginPanel
 	XpPanel(TimeToMaxPlugin timeToMaxPlugin, TimeToMaxConfig timeToMaxConfig, Client client, SkillIconManager iconManager)
 	{
 		super();
-		this.client = client;
 
 		setBorder(new EmptyBorder(6, 6, 6, 6));
 		setBackground(ColorScheme.DARK_GRAY_COLOR);

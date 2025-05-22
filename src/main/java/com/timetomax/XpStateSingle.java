@@ -26,7 +26,6 @@
  */
 package com.timetomax;
 
-import java.time.LocalDate;
 import java.util.Arrays;
 import lombok.Getter;
 import lombok.Setter;
@@ -97,21 +96,15 @@ class XpStateSingle
 
 	private int getXpRemaining()
 	{
-		// For properly configured goal-based tracking
-		if (endLevelExp == XpCalculator.MAX_XP)
-		{
-			// Return XP remaining to max level
-			return Math.max(0, XpCalculator.MAX_XP - (int) getCurrentXp());
-		}
-
-		// Return XP remaining to the next level or configured goal
+		// Always use endLevelExp which is the current goal (either user defined or next level)
+		// endLevelExp is properly set in updateGoals based on the user's configured goal
 		return Math.max(0, endLevelExp - (int) getCurrentXp());
 	}
-
 	private int getActionsRemaining()
 	{
 		if (actionsHistoryInitialized)
 		{
+			// Use XP remaining to the actual goal (endLevelExp) rather than next level
 			long xpRemaining = getXpRemaining() * actionExps.length;
 			long totalActionXp = 0;
 
@@ -264,6 +257,7 @@ class XpStateSingle
 
 	void updateGoals(long currentXp, int goalStartXp, int goalEndXp)
 	{
+		// Set start level XP based on either goal start XP or current level's base XP
 		if (goalStartXp < 0 || currentXp > goalEndXp)
 		{
 			startLevelExp = Experience.getXpForLevel(Experience.getLevelForXp((int) currentXp));
@@ -273,16 +267,19 @@ class XpStateSingle
 			startLevelExp = goalStartXp;
 		}
 
-		if (goalEndXp <= 0 || currentXp > goalEndXp)
+		// Set end goal XP based on specific goal or next level
+		if (goalEndXp > 0 && currentXp <= goalEndXp)
 		{
+			// Use the specified goal if it's valid
+			endLevelExp = goalEndXp;
+		}
+		else
+		{
+			// Default to next level if no valid goal
 			int currentLevel = Experience.getLevelForXp((int) currentXp);
 			endLevelExp = currentLevel + 1 <= Experience.MAX_VIRT_LEVEL
 				? Experience.getXpForLevel(currentLevel + 1)
 				: Experience.MAX_SKILL_XP;
-		}
-		else
-		{
-			endLevelExp = goalEndXp;
 		}
 	}
 	public void tick(long delta)
