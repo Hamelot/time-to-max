@@ -35,9 +35,7 @@ import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 import javax.swing.ImageIcon;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -51,7 +49,6 @@ import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 import lombok.AccessLevel;
 import lombok.Getter;
-import net.runelite.api.Experience;
 import net.runelite.api.Skill;
 import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.ui.ColorScheme;
@@ -318,7 +315,6 @@ class XpInfoBox extends JPanel
 			}
 
 			// Always use consistent XP values from the snapshot
-			int currentXp = xpSnapshotSingle.getEndGoalXp() - xpSnapshotSingle.getXpRemainingToGoal();
 			int goalStartXp = xpSnapshotSingle.getStartGoalXp();
 			int xpGained = xpSnapshotSingle.getXpGainedInSession();
 			int requiredXp = XpCalculator.getRequiredXpPerInterval(goalStartXp, targetDate, interval);
@@ -355,7 +351,7 @@ class XpInfoBox extends JPanel
 				progressBar.setToolTipText(String.format(
 					PROGRESS_BAR_TOOLTIP_NO_ACTIONS,
 					tooltipLabel.getValueFunc().apply(xpSnapshotSingle),
-					tooltipLabel == XpProgressBarLabel.PERCENTAGE ? "of goal" : "till goal lvl",
+					tooltipLabel == XpProgressBarLabel.PERCENTAGE ? "of goal" : "till goal xp",
 					targetProgressText));
 			}
 			else
@@ -365,7 +361,7 @@ class XpInfoBox extends JPanel
 					xpSnapshotSingle.getActionsInSession(),
 					xpSnapshotSingle.getActionsPerHour(),
 					tooltipLabel.getValueFunc().apply(xpSnapshotSingle),
-					tooltipLabel == XpProgressBarLabel.PERCENTAGE ? "of goal" : "till goal lvl",
+					tooltipLabel == XpProgressBarLabel.PERCENTAGE ? "of goal" : "till goal xp",
 					targetProgressText));
 			}
 
@@ -385,6 +381,37 @@ class XpInfoBox extends JPanel
 			else
 			{
 				topRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel2(), xpSnapshotSingle));
+			}
+
+			// For ACTIONS_LEFT label, make sure it shows actions to reach the interval goal
+			if (timeToMaxConfig.xpPanelLabel1() == XpPanelLabel.ACTIONS_LEFT ||
+				timeToMaxConfig.xpPanelLabel2() == XpPanelLabel.ACTIONS_LEFT ||
+				timeToMaxConfig.xpPanelLabel3() == XpPanelLabel.ACTIONS_LEFT ||
+				timeToMaxConfig.xpPanelLabel4() == XpPanelLabel.ACTIONS_LEFT)
+			{
+				String key = XpPanelLabel.ACTIONS_LEFT.getKey() + ": ";
+				// Use the actions remaining from the snapshot which is now calculated correctly
+				String value = xpSnapshotSingle.getActionsRemainingToGoal() == Integer.MAX_VALUE 
+					? "N/A" 
+					: QuantityFormatter.quantityToRSDecimalStack(xpSnapshotSingle.getActionsRemainingToGoal(), true);
+				
+				// Update all labels configured to show Actions left
+				if (timeToMaxConfig.xpPanelLabel1() == XpPanelLabel.ACTIONS_LEFT)
+				{
+					topLeftStat.setText(htmlLabel(key, value));
+				}
+				if (timeToMaxConfig.xpPanelLabel2() == XpPanelLabel.ACTIONS_LEFT)
+				{
+					topRightStat.setText(htmlLabel(key, value));
+				}
+				if (timeToMaxConfig.xpPanelLabel3() == XpPanelLabel.ACTIONS_LEFT)
+				{
+					bottomLeftStat.setText(htmlLabel(key, value));
+				}
+				if (timeToMaxConfig.xpPanelLabel4() == XpPanelLabel.ACTIONS_LEFT)
+				{
+					bottomRightStat.setText(htmlLabel(key, value));
+				}
 			}
 
 			// For XP_GAINED label, consistently show XP from snapshot
