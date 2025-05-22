@@ -87,17 +87,6 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 1,
-		keyName = "intermediateLevelMarkers",
-		name = "Show intermediate level markers",
-		description = "Marks intermediate levels on the progress bar."
-	)
-	default boolean showIntermediateLevels()
-	{
-		return false;
-	}
-
-	@ConfigItem(
 		position = 2,
 		keyName = "pauseSkillAfter",
 		name = "Auto pause after",

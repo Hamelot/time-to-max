@@ -84,7 +84,11 @@ class XpPanel extends PluginPanel
 		overallPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
 		overallPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		overallPanel.setLayout(new BorderLayout());
-		overallPanel.setVisible(true);
+		overallPanel.setVisible(false);
+
+		// Create reset all menu
+		final JMenuItem reset = new JMenuItem("Reset All");
+		reset.addActionListener(e -> timeToMaxPlugin.resetAndInitState());
 
 		// Create reset all per hour menu
 		final JMenuItem resetPerHour = new JMenuItem("Reset All/hr");
@@ -102,6 +106,7 @@ class XpPanel extends PluginPanel
 		// Create popup menu
 		final JPopupMenu popupMenu = new JPopupMenu();
 		popupMenu.setBorder(new EmptyBorder(5, 5, 5, 5));
+		popupMenu.add(reset);
 		popupMenu.add(resetPerHour);
 		popupMenu.add(pauseAll);
 		popupMenu.add(unpauseAll);
@@ -153,20 +158,20 @@ class XpPanel extends PluginPanel
 		add(errorPanel);
 	}
 
+	void showOverallPanel()
+	{
+		overallPanel.setVisible(true);
+	}
+
 	void resetAllInfoBoxes()
 	{
-		// Reset all individual skill info boxes without removing them
 		infoBoxes.forEach((skill, xpInfoBox) -> xpInfoBox.reset());
+	}
 
-		// Reset overall panel stats
-		overallExpGained.setText(XpInfoBox.htmlLabel("Gained: ", 0));
-		overallExpHour.setText(XpInfoBox.htmlLabel("Per hour: ", 0));
-
-		// Force a UI refresh
-		SwingUtilities.invokeLater(() -> {
-			revalidate();
-			repaint();
-		});
+	void resetSkill(Skill skill)
+	{
+		final XpInfoBox xpInfoBox = infoBoxes.get(skill);
+		xpInfoBox.reset();
 	}
 
 	void updateSkillExperience(boolean updated, boolean paused, Skill skill, XpSnapshotSingle xpSnapshotSingle)
@@ -177,13 +182,15 @@ class XpPanel extends PluginPanel
 
 	void updateTotal(XpSnapshotSingle xpSnapshotTotal)
 	{
-		// Show error panel if player is not logged in, hide it if logged in
-		if (client.getLocalPlayer() != null)
+		// if player has gained exp and hasn't switched displays yet, hide error panel and show overall info
+		if (xpSnapshotTotal.getXpGainedInSession() > 0 && !overallPanel.isVisible())
 		{
+			overallPanel.setVisible(true);
 			remove(errorPanel);
 		}
-		else
+		else if (xpSnapshotTotal.getXpGainedInSession() == 0 && overallPanel.isVisible())
 		{
+			overallPanel.setVisible(false);
 			add(errorPanel);
 		}
 

@@ -268,5 +268,6 @@ class XpState
 			xpSkills.put(skill, state);
 			order.add(skill);
 		}
+		overall.restore(save.overall);
 	}
 }

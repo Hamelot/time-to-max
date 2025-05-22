@@ -135,14 +135,6 @@ class XpInfoBox extends JPanel
 		container.setLayout(new BorderLayout());
 		container.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 
-		// Create reset menu
-		final JMenuItem reset = new JMenuItem("Reset");
-		reset.addActionListener(e -> timeToMaxPlugin.resetSkillState(skill));
-
-		// Create reset others menu
-		final JMenuItem resetOthers = new JMenuItem("Reset others");
-		resetOthers.addActionListener(e -> timeToMaxPlugin.resetOtherSkillState(skill));
-
 		// Create reset per hour menu
 		final JMenuItem resetPerHour = new JMenuItem("Reset/hr");
 		resetPerHour.addActionListener(e -> timeToMaxPlugin.resetSkillPerHourState(skill));
@@ -153,8 +145,6 @@ class XpInfoBox extends JPanel
 		// Create popup menu
 		final JPopupMenu popupMenu = new JPopupMenu();
 		popupMenu.setBorder(new EmptyBorder(5, 5, 5, 5));
-		popupMenu.add(reset);
-		popupMenu.add(resetOthers);
 		popupMenu.add(resetPerHour);
 		popupMenu.add(pauseSkill);
 		popupMenu.add(canvasItem);
@@ -199,18 +189,12 @@ class XpInfoBox extends JPanel
 		bottomLeftStat.setFont(FontManager.getRunescapeSmallFont());
 		topRightStat.setFont(FontManager.getRunescapeSmallFont());
 		bottomRightStat.setFont(FontManager.getRunescapeSmallFont());
-		//targetXpStat.setFont(FontManager.getRunescapeSmallFont());
 
-		// Empty label for grid alignment
-		//JLabel emptyLabel = new JLabel();
-		//emptyLabel.setFont(FontManager.getRunescapeSmallFont());
 
 		statsPanel.add(topLeftStat);     // top left
 		statsPanel.add(topRightStat);    // top right
 		statsPanel.add(bottomLeftStat);  // bottom left
 		statsPanel.add(bottomRightStat); // bottom right
-		//statsPanel.add(targetXpStat);    // bottom left, row 3
-		//statsPanel.add(emptyLabel);      // bottom right, row 3
 
 		JLabel headerSkillIcon = getSkillIcon(iconManager, skill, 35, 35, false);
 		headerPanel.add(headerSkillIcon, BorderLayout.WEST);
@@ -320,8 +304,8 @@ class XpInfoBox extends JPanel
 			}
 
 			paused = skillPaused;
-
-			// Get current XP and tracking settings
+			
+				// Get settings and XP values
 			TrackingInterval interval = timeToMaxConfig.trackingInterval();
 			LocalDate targetDate;
 			try
@@ -333,28 +317,27 @@ class XpInfoBox extends JPanel
 				targetDate = LocalDate.now().plusYears(1);
 			}
 
+			// Always use consistent XP values from the snapshot
 			int currentXp = xpSnapshotSingle.getEndGoalXp() - xpSnapshotSingle.getXpRemainingToGoal();
 			int goalStartXp = xpSnapshotSingle.getStartGoalXp();
-
-			// Get target tracking values
-			int targetXpGained = XpCalculator.getTargetXpGained(skill, currentXp);
+			int xpGained = xpSnapshotSingle.getXpGainedInSession();
 			int requiredXp = XpCalculator.getRequiredXpPerInterval(goalStartXp, targetDate, interval);
-			int targetProgress = requiredXp > 0 ? Math.min(100, (int) ((double) targetXpGained / requiredXp * 100)) : 0;
+			int progressPercent = requiredXp > 0 ? Math.min(100, (int) ((double) xpGained / requiredXp * 100)) : 0;
 
-			// Target progress mode - use period tracking
-			progressBar.setValue(targetProgress);
+			// Update progress bar
+			progressBar.setValue(progressPercent);
 			progressBar.setLeftLabel("");
 			progressBar.setRightLabel(QuantityFormatter.quantityToRSDecimalStack(requiredXp, true));
 			progressBar.setPositions(Collections.emptyList());
 
 			// Set center label based on completion status
-			if (targetProgress >= 100)
+			if (progressPercent >= 100)
 			{
 				progressBar.setCenterLabel("Complete");
 			}
 			else
 			{
-				String progress = String.format("%d%%", targetProgress);
+				String progress = String.format("%d%%", progressPercent);
 				progressBar.setCenterLabel(progress);
 			}
 
@@ -362,7 +345,7 @@ class XpInfoBox extends JPanel
 			XpProgressBarLabel tooltipLabel = timeToMaxConfig.progressBarTooltipLabel();
 			String targetProgressText = String.format(
 				"<br/>%s/%s target XP for %s",
-				QuantityFormatter.quantityToRSDecimalStack(targetXpGained, true),
+				QuantityFormatter.quantityToRSDecimalStack(xpGained, true),
 				QuantityFormatter.quantityToRSDecimalStack(requiredXp, true),
 				interval.toString().toLowerCase());
 
@@ -387,66 +370,55 @@ class XpInfoBox extends JPanel
 			}
 
 			progressBar.setDimmed(skillPaused);
+
 			// Update XP panel labels
 			topLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel1(), xpSnapshotSingle));
 
-			// For the XP_LEFT label, show remaining XP needed for this interval,
-			// decreasing as player gains XP toward their target
+			// For the XP_LEFT label, show remaining XP needed for this interval
 			if (timeToMaxConfig.xpPanelLabel2() == XpPanelLabel.XP_LEFT)
 			{
 				String key = XpPanelLabel.XP_LEFT.getKey() + ": ";
-				// Calculate remaining XP needed for this interval by subtracting gained XP from required XP
-				int remainingXpForInterval = Math.max(0, requiredXp - targetXpGained);
+				int remainingXpForInterval = Math.max(0, requiredXp - xpGained);
 				String value = QuantityFormatter.quantityToRSDecimalStack(remainingXpForInterval, true);
 				topRightStat.setText(htmlLabel(key, value));
 			}
 			else
 			{
 				topRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel2(), xpSnapshotSingle));
-			}            // For XP_GAINED label, we should always show the same value that appears in the tooltip
-			// This ensures consistency between the main display and tooltip
+			}
+
+			// For XP_GAINED label, consistently show XP from snapshot
 			if (timeToMaxConfig.xpPanelLabel1() == XpPanelLabel.XP_GAINED ||
 				timeToMaxConfig.xpPanelLabel2() == XpPanelLabel.XP_GAINED ||
 				timeToMaxConfig.xpPanelLabel3() == XpPanelLabel.XP_GAINED ||
 				timeToMaxConfig.xpPanelLabel4() == XpPanelLabel.XP_GAINED)
 			{
-				// Get the HTML label key
 				String key = XpPanelLabel.XP_GAINED.getKey() + ": ";
+				String value = QuantityFormatter.quantityToRSDecimalStack(xpGained, true);
 
-				// Always use the interval XP gained value to be consistent with the tooltip
-				// This is the source of the inconsistency - we now always use targetXpGained
-				int xpToShow = targetXpGained;
-
-				String value = QuantityFormatter.quantityToRSDecimalStack(xpToShow, true);
-
-				// Update all labels that are configured to show XP gained
+				// Update all labels configured to show XP gained
 				if (timeToMaxConfig.xpPanelLabel1() == XpPanelLabel.XP_GAINED)
 				{
 					topLeftStat.setText(htmlLabel(key, value));
 				}
-
 				if (timeToMaxConfig.xpPanelLabel2() == XpPanelLabel.XP_GAINED)
 				{
 					topRightStat.setText(htmlLabel(key, value));
 				}
-
 				if (timeToMaxConfig.xpPanelLabel3() == XpPanelLabel.XP_GAINED)
 				{
 					bottomLeftStat.setText(htmlLabel(key, value));
 				}
 				else
 				{
-					// Apply standard label
 					bottomLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel3(), xpSnapshotSingle));
 				}
-
 				if (timeToMaxConfig.xpPanelLabel4() == XpPanelLabel.XP_GAINED)
 				{
 					bottomRightStat.setText(htmlLabel(key, value));
 				}
 				else
 				{
-					// Apply standard label
 					bottomRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel4(), xpSnapshotSingle));
 				}
 			}
@@ -458,24 +430,16 @@ class XpInfoBox extends JPanel
 				bottomLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel3(), xpSnapshotSingle));
 				bottomRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel4(), xpSnapshotSingle));
 			}
-
-			// Update target XP label
-			//targetXpStat.setText(htmlLabel("Target " + interval.toString().toLowerCase() + ": ",
-			//	QuantityFormatter.quantityToRSDecimalStack(targetXpGained, true) + "/" +
-			//		QuantityFormatter.quantityToRSDecimalStack(requiredXp, true) +
-			//		" (" + targetProgress + "%)"));
 		}
 		// Handle paused state changes
 		else if (!paused && skillPaused)
 		{
-			// React to the skill state now being paused
 			progressBar.setDimmed(true);
 			paused = true;
 			pauseSkill.setText("Unpause");
 		}
 		else if (paused && !skillPaused)
 		{
-			// React to the skill being unpaused (without update)
 			progressBar.setDimmed(false);
 			paused = false;
 			pauseSkill.setText("Pause");

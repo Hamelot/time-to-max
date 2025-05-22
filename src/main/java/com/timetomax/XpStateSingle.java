@@ -26,6 +26,7 @@
  */
 package com.timetomax;
 
+import java.time.LocalDate;
 import java.util.Arrays;
 import lombok.Getter;
 import lombok.Setter;
@@ -142,16 +143,15 @@ class XpStateSingle
 	private long getSecondsTillLevel()
 	{
 		long seconds = getTimeElapsedInSeconds();
-
-		if (seconds <= 0 || xpGainedSinceReset <= 0)
+		if (seconds <= 0 || getTotalXpGained() <= 0)
 		{
 			return -1;
 		}
 
 		// formula is xpRemaining / xpPerSecond
-		// xpPerSecond being xpGained / seconds
+		// xpPerSecond being total xp gained / seconds
 		// This can be simplified so division is only done once and we can work in whole numbers!
-		return (getXpRemaining() * seconds) / xpGainedSinceReset;
+		return (getXpRemaining() * seconds) / getTotalXpGained();
 	}
 
 	private String getTimeTillLevel(XpGoalTimeType goalTimeType)
@@ -204,18 +204,17 @@ class XpStateSingle
 				return String.format("%02d:%02d", durationMinutes, durationSeconds);
 		}
 	}
-
 	int getXpHr()
 	{
-		return toHourly(xpGainedSinceReset);
+		// Use total XP gained for XP/hr calculation
+		return toHourly(getTotalXpGained());
 	}
-
 	void resetPerHour()
 	{
 		//reset actions per hour
 		actionsSinceReset = 0;
 
-		//reset xp per hour
+		//preserve total xp gained while resetting the per-hour tracking
 		xpGainedBeforeReset += xpGainedSinceReset;
 		xpGainedSinceReset = 0;
 		lastChangeMillis = System.currentTimeMillis();
@@ -230,8 +229,9 @@ class XpStateSingle
 			return false;
 		}
 
-		long originalXp = getTotalXpGained() + startXp;
-		int actionExp = (int) (currentXp - originalXp);
+		// Calculate XP gained since last update
+		long previousTotal = getTotalXpGained();
+		int actionExp = (int) (currentXp - (startXp + previousTotal));
 
 		// No experience gained
 		if (actionExp == 0)
@@ -264,59 +264,44 @@ class XpStateSingle
 
 	void updateGoals(long currentXp, int goalStartXp, int goalEndXp)
 	{
-		int currentLevel = Experience.getLevelForXp((int) currentXp);
-
-		// On initial setup or reset, use the current level's base XP
-		startLevelExp = (goalStartXp < 0 || currentXp > (goalEndXp + startXp))
-			? Experience.getXpForLevel(currentLevel)  // XP required for current level
-			: goalStartXp;
-
-		// For the end goal, use next level or specified goal
-		if (goalEndXp <= 0 || currentXp > (goalEndXp + startXp))
+		if (goalStartXp < 0 || currentXp > goalEndXp)
 		{
-			// If at max level, use max XP as goal
-			if (currentLevel >= Experience.MAX_VIRT_LEVEL)
-			{
-				endLevelExp = Experience.MAX_SKILL_XP;
-			}
-			else
-			{
-				// For initial setup, the end goal should be max XP (13,034,431 for level 99)
-				// This ensures that "XP Left" shows the XP remaining to max
-				endLevelExp = XpCalculator.MAX_XP;
-			}
+			startLevelExp = Experience.getXpForLevel(Experience.getLevelForXp((int) currentXp));
+		}
+		else
+		{
+			startLevelExp = goalStartXp;
+		}
+
+		if (goalEndXp <= 0 || currentXp > goalEndXp)
+		{
+			int currentLevel = Experience.getLevelForXp((int) currentXp);
+			endLevelExp = currentLevel + 1 <= Experience.MAX_VIRT_LEVEL
+				? Experience.getXpForLevel(currentLevel + 1)
+				: Experience.MAX_SKILL_XP;
 		}
 		else
 		{
 			endLevelExp = goalEndXp;
 		}
-
-		// Ensure the endLevelExp is always greater than or equal to currentXp
-		// This prevents negative XP remaining values
-		if (endLevelExp < currentXp)
-		{
-			endLevelExp = (int) currentXp;
-		}
 	}
-
 	public void tick(long delta)
 	{
-		// Don't tick skills that have not gained XP or have been reset.
-		if (xpGainedSinceReset <= 0)
+		// Track time as long as we have gained XP since baseline
+		if (getTotalXpGained() <= 0)
 		{
 			return;
 		}
 		skillTime += delta;
 	}
-
 	XpSnapshotSingle snapshot()
 	{
 		return XpSnapshotSingle.builder()
 			.startLevel(Experience.getLevelForXp(startLevelExp))
 			.endLevel(Experience.getLevelForXp(endLevelExp))
-			.xpGainedInSession(getTotalXpGained())
+			.xpGainedInSession(getTotalXpGained())  // Use total XP gained from baseline
 			.xpRemainingToGoal(getXpRemaining())
-			.xpPerHour(getXpHr())
+			.xpPerHour(getXpHr())  // This now uses total XP gained
 			.skillProgressToGoal(getSkillProgress())
 			.actionsInSession(actions)
 			.actionsRemainingToGoal(getActionsRemaining())
