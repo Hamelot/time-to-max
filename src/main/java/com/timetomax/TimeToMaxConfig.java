@@ -223,4 +223,26 @@ public interface TimeToMaxConfig extends Config
 	{
 		return true;
 	}
+
+	@ConfigItem(
+		position = 14,
+		keyName = "pinCompletedSkillsToBottom",
+		name = "Pin completed skills to bottom",
+		description = "Configures whether completed skills should be pinned to the bottom of the list."
+	)
+	default boolean pinCompletedSkillsToBottom()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		position = 15,
+		keyName = "collapseCompletedSkills",
+		name = "Collapse completed skills",
+		description = "Configures whether completed skills should be collapsed."
+	)
+	default boolean collapseCompletedSkills()
+	{
+		return true;
+	}
 }

@@ -295,14 +295,42 @@ class XpInfoBox extends JPanel
 				panel.revalidate();
 			}
 
+			// Handle prioritized skills (move to top)
 			if (timeToMaxConfig.prioritizeRecentXpSkills())
 			{
 				panel.setComponentZOrder(this, 0);
 			}
 
+			// Handle completed skills (move to bottom)
+			if (timeToMaxConfig.pinCompletedSkillsToBottom())
+			{
+				int goalStartXp = xpSnapshotSingle.getStartGoalXp();
+				int xpGained = xpSnapshotSingle.getXpGainedInSession();
+				int currentXp = goalStartXp + xpGained;
+
+				// If we have goal information and enough XP to determine completion
+				try
+				{
+					LocalDate targetDate = LocalDate.parse(timeToMaxConfig.targetDate());
+					TrackingInterval interval = timeToMaxConfig.trackingInterval();
+
+					// If skill target is met, move to bottom of panel
+					var startGoalXp = xpSnapshotSingle.getStartGoalXp();
+					if (Math.max(0, currentXp - startGoalXp) >= XpCalculator.getRequiredXpPerInterval(startGoalXp, targetDate, interval))
+					{
+						panel.setComponentZOrder(this, panel.getComponentCount() - 1);
+						panel.revalidate();
+					}
+				}
+				catch (Exception e)
+				{
+					// Don't change positioning if we can't determine completion status
+				}
+			}
+
 			paused = skillPaused;
-			
-				// Get settings and XP values
+
+			// Get settings and XP values
 			TrackingInterval interval = timeToMaxConfig.trackingInterval();
 			LocalDate targetDate;
 			try
@@ -330,10 +358,16 @@ class XpInfoBox extends JPanel
 			if (progressPercent >= 100)
 			{
 				progressBar.setCenterLabel("Complete");
+				// collapse progress bar if completed
+				if (timeToMaxConfig.collapseCompletedSkills())
+				{
+					setCompactView(true);
+				}
 			}
 			else
 			{
 				String progress = String.format("%d%%", progressPercent);
+				setCompactView(false);
 				progressBar.setCenterLabel(progress);
 			}
 
@@ -391,10 +425,10 @@ class XpInfoBox extends JPanel
 			{
 				String key = XpPanelLabel.ACTIONS_LEFT.getKey() + ": ";
 				// Use the actions remaining from the snapshot which is now calculated correctly
-				String value = xpSnapshotSingle.getActionsRemainingToGoal() == Integer.MAX_VALUE 
-					? "N/A" 
+				String value = xpSnapshotSingle.getActionsRemainingToGoal() == Integer.MAX_VALUE
+					? "N/A"
 					: QuantityFormatter.quantityToRSDecimalStack(xpSnapshotSingle.getActionsRemainingToGoal(), true);
-				
+
 				// Update all labels configured to show Actions left
 				if (timeToMaxConfig.xpPanelLabel1() == XpPanelLabel.ACTIONS_LEFT)
 				{
