@@ -62,6 +62,7 @@ class XpPanel extends PluginPanel
 	private final JPanel targetPanel = new JPanel();
 	private final JLabel targetDateLabel = new JLabel(XpInfoBox.htmlLabel("Target Date: ", ""));
 	private final JLabel targetIntervalLabel = new JLabel(XpInfoBox.htmlLabel("Tracking: ", ""));
+	private final JLabel intervalsRemainingLabel = new JLabel(XpInfoBox.htmlLabel("Intervals remaining: ", ""));
 
 	/* This displays the "track xp" text */
 	private final PluginErrorPanel errorPanel = new PluginErrorPanel();
@@ -115,14 +116,16 @@ class XpPanel extends PluginPanel
 		// Initialize the target panel
 		targetPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
 		targetPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-		targetPanel.setLayout(new GridLayout(3, 1));
+		targetPanel.setLayout(new GridLayout(4, 1));
 		targetPanel.setVisible(true); // Make target panel visible by default
 
 		targetDateLabel.setFont(FontManager.getRunescapeSmallFont());
 		targetIntervalLabel.setFont(FontManager.getRunescapeSmallFont());
+		intervalsRemainingLabel.setFont(FontManager.getRunescapeSmallFont());
 
 		targetPanel.add(targetDateLabel);
 		targetPanel.add(targetIntervalLabel);
+		targetPanel.add(intervalsRemainingLabel);
 
 		// Set initial values
 		updateTargetPanel(timeToMaxConfig);
@@ -139,6 +142,14 @@ class XpPanel extends PluginPanel
 
 		// Add target panel to layout
 		layoutPanel.add(targetPanel);
+
+		errorPanel.setContent("Time To Max", "To start tracking how much XP you need per interval, make sure to:\n" +
+			"<br/>\n" +
+			"<br/>- Log in to your account\n" +
+			"<br/>- Earn some XP\n" +
+			"<br/><br/>Once you've done both, this plugin will begin calculating your XP needs automatically!");
+		add(errorPanel);
+
 		layoutPanel.add(overallPanel);
 		layoutPanel.add(infoBoxPanel);
 
@@ -146,9 +157,6 @@ class XpPanel extends PluginPanel
 		{
 			infoBoxes.put(skill, new XpInfoBox(timeToMaxPlugin, timeToMaxConfig, infoBoxPanel, skill, iconManager));
 		}
-
-		errorPanel.setContent("Time To Max", "Log in and view and track the minimum xp required to meet your maxing goal.");
-		add(errorPanel);
 	}
 
 	void showOverallPanel()
@@ -176,10 +184,15 @@ class XpPanel extends PluginPanel
 	void updateTotal(XpSnapshotSingle xpSnapshotTotal)
 	{
 		// if player has gained exp and hasn't switched displays yet, hide error panel and show overall info
-		if (xpSnapshotTotal.getXpGainedInSession() >= 0 && !overallPanel.isVisible())
+		if (xpSnapshotTotal.getXpGainedInSession() > 0 && !overallPanel.isVisible())
 		{
 			overallPanel.setVisible(true);
 			remove(errorPanel);
+		}
+		else if (xpSnapshotTotal.getXpGainedInSession() == 0 && overallPanel.isVisible())
+		{
+			overallPanel.setVisible(false);
+			add(errorPanel);
 		}
 
 		SwingUtilities.invokeLater(() -> rebuildAsync(xpSnapshotTotal));
@@ -200,9 +213,53 @@ class XpPanel extends PluginPanel
 		{
 			LocalDate targetDate = LocalDate.parse(config.targetDate());
 			TrackingInterval interval = config.trackingInterval();
+			LocalDate now = LocalDate.now();
+			// Calculate intervals remaining based on tracking interval
+			long intervalsRemaining;
+			String intervalUnit;
+
+			java.time.LocalDateTime currentTime = java.time.LocalDateTime.now();
+
+			switch (interval)
+			{
+				case DAY:
+					// For day interval, show hours remaining in the current day
+					java.time.LocalDateTime endOfDay = currentTime.toLocalDate().atTime(23, 59, 59);
+					long hoursRemaining = java.time.temporal.ChronoUnit.HOURS.between(currentTime, endOfDay);
+					// Add one to account for the current partial hour
+					intervalsRemaining = Math.max(1, hoursRemaining + 1);
+					intervalUnit = "Hour";
+					break;
+				case WEEK:
+					// Calculate days remaining in the current week (assuming week ends on Sunday)
+					java.time.DayOfWeek currentDay = currentTime.getDayOfWeek();
+					int daysUntilEndOfWeek = java.time.DayOfWeek.SUNDAY.getValue() - currentDay.getValue();
+					if (daysUntilEndOfWeek < 0)
+					{
+						daysUntilEndOfWeek += 7; // If today is Sunday, there are 0 days left
+					}
+					intervalsRemaining = daysUntilEndOfWeek == 0 ? 1 : daysUntilEndOfWeek; // Minimum 1 day
+					intervalUnit = "Day";
+					break;
+				case MONTH:
+					// Calculate days remaining in the current month
+					java.time.LocalDate lastDayOfMonth = currentTime.toLocalDate()
+						.withDayOfMonth(currentTime.toLocalDate().lengthOfMonth());
+					intervalsRemaining = java.time.temporal.ChronoUnit.DAYS.between(
+						currentTime.toLocalDate(), lastDayOfMonth) + 1; // +1 to include today
+					intervalUnit = "Day";
+					break;
+				default:
+					intervalsRemaining = Math.max(0, java.time.temporal.ChronoUnit.DAYS.between(now, targetDate));
+					intervalUnit = "Day";
+			}
 
 			targetDateLabel.setText(XpInfoBox.htmlLabel("Target Date: ", targetDate.toString()));
 			targetIntervalLabel.setText(XpInfoBox.htmlLabel("Tracking: ", "Per " + interval.toString().toLowerCase()));
+
+			// Format the label with plural handling
+			String labelText = intervalUnit + (intervalsRemaining != 1 ? "s" : "") + " remaining: " + intervalsRemaining;
+			intervalsRemainingLabel.setText(XpInfoBox.htmlLabel(labelText, ""));
 
 			targetPanel.setVisible(true);
 			targetPanel.revalidate();
@@ -212,6 +269,7 @@ class XpPanel extends PluginPanel
 		{
 			targetDateLabel.setText(XpInfoBox.htmlLabel("Target Date: ", "Invalid date format"));
 			targetIntervalLabel.setText(XpInfoBox.htmlLabel("Tracking: ", config.trackingInterval().toString()));
+			intervalsRemainingLabel.setText(XpInfoBox.htmlLabel("Intervals remaining: ", "Unknown"));
 
 			targetPanel.setVisible(true);
 			targetPanel.revalidate();

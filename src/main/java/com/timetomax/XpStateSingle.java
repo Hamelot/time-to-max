@@ -62,7 +62,6 @@ class XpStateSingle
 	XpStateSingle(long startXp)
 	{
 		this.startXp = startXp;
-		this.endLevelExp = XpCalculator.MAX_XP; // Initialize to MAX_XP by default
 	}
 
 	long getCurrentXp()
@@ -100,6 +99,7 @@ class XpStateSingle
 		// endLevelExp is properly set in updateGoals based on the user's configured goal
 		return Math.max(0, endLevelExp - (int) getCurrentXp());
 	}
+
 	private int getActionsRemaining()
 	{
 		if (actionsHistoryInitialized)
@@ -197,11 +197,13 @@ class XpStateSingle
 				return String.format("%02d:%02d", durationMinutes, durationSeconds);
 		}
 	}
+
 	int getXpHr()
 	{
 		// Use total XP gained for XP/hr calculation
 		return toHourly(getTotalXpGained());
 	}
+
 	void resetPerHour()
 	{
 		//reset actions per hour
@@ -257,7 +259,6 @@ class XpStateSingle
 
 	void updateGoals(long currentXp, int goalStartXp, int goalEndXp)
 	{
-		// Set start level XP based on either goal start XP or current level's base XP
 		if (goalStartXp < 0 || currentXp > goalEndXp)
 		{
 			startLevelExp = Experience.getXpForLevel(Experience.getLevelForXp((int) currentXp));
@@ -282,6 +283,7 @@ class XpStateSingle
 				: Experience.MAX_SKILL_XP;
 		}
 	}
+
 	public void tick(long delta)
 	{
 		// Track time as long as we have gained XP since baseline
@@ -291,6 +293,7 @@ class XpStateSingle
 		}
 		skillTime += delta;
 	}
+
 	XpSnapshotSingle snapshot()
 	{
 		return XpSnapshotSingle.builder()

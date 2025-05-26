@@ -1,5 +1,6 @@
 package com.timetomax;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
@@ -46,6 +47,11 @@ class XpState
 	void resetOverallPerHour()
 	{
 		overall.resetPerHour();
+	}
+
+	void addSkillOrder(Skill skill)
+	{
+		order.add(skill);
 	}
 
 	/**
@@ -145,9 +151,10 @@ class XpState
 	 */
 	void initializeSkill(Skill skill, long currentXp)
 	{
+		var targetGoalXp = XpCalculator.getRequiredXpPerInterval((int) currentXp, LocalDate.parse(config.targetDate()), config.trackingInterval());
 		XpStateSingle state = new XpStateSingle(currentXp);
-		// Initialize the end goal to MAX_XP so XP Left shows the correct value from the start
-		state.updateGoals(currentXp, (int) currentXp, XpCalculator.MAX_XP);
+
+		state.updateGoals(currentXp, (int) currentXp, (int) (currentXp + targetGoalXp));
 		xpSkills.put(skill, state);
 	}
 
@@ -166,6 +173,11 @@ class XpState
 	{
 		XpStateSingle xpStateSingle = xpSkills.get(skill);
 		xpStateSingle.setStartXp(-1);
+	}
+
+	void unInitializeOverall()
+	{
+		overall = new XpStateSingle(-1);
 	}
 
 	boolean isOverallInitialized()
@@ -258,6 +270,12 @@ class XpState
 	void restore(XpSave save)
 	{
 		reset();
+
+		if (save.skills.entrySet().isEmpty())
+		{
+			log.debug("No skills in save!");
+			return;
+		}
 
 		for (Map.Entry<Skill, XpSaveSingle> entry : save.skills.entrySet())
 		{

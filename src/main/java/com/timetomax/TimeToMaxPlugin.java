@@ -56,6 +56,7 @@ import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.WidgetUtil;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.chat.ChatCommandManager;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ClientShutdown;
@@ -380,6 +381,8 @@ public class TimeToMaxPlugin extends Plugin
 		// Skip processing for skills that are already maxed
 		if (currentLevel >= Experience.MAX_REAL_LEVEL)
 		{
+			xpPanel.resetSkill(skill);
+			removeOverlay(skill);
 			return;
 		}
 
@@ -408,7 +411,7 @@ public class TimeToMaxPlugin extends Plugin
 		final int goalStartXp = XpCalculator.getTargetStartXp(skill);
 
 		// Calculate the goal XP based on target date and interval
-		final int endGoalXp = goalStartXp + XpCalculator.getRequiredXpPerIntervalCached(skill, goalStartXp, targetDate, interval);
+		final int endGoalXp = goalStartXp + XpCalculator.getRequiredXpPerInterval(goalStartXp, targetDate, interval);
 
 		// Update the skill state and UI
 		final XpUpdateResult updateResult = xpState.updateSkill(skill, currentXp, goalStartXp, endGoalXp);
@@ -429,34 +432,18 @@ public class TimeToMaxPlugin extends Plugin
 		{
 			XpSave save;
 			// Restore from saved state
-			if ((save = loadSaveState(configManager.getRSProfileKey())) != null)
+			if (!xpState.isOverallInitialized() && (save = loadSaveState(configManager.getRSProfileKey())) != null)
 			{
 				log.debug("Loading xp state from save");
 				xpState.restore(save);
 
-				// Filter out skills that are already maxed
-				Iterator<Skill> skillIterator = save.skills.keySet().iterator();
-				while (skillIterator.hasNext())
+				for (Skill skill : save.skills.keySet())
 				{
-					Skill skill = skillIterator.next();
-					final int currentXp = client.getSkillExperience(skill);
-					final int currentLevel = Experience.getLevelForXp(currentXp);
+					final int startXp = XpCalculator.getTargetStartXp(skill);
+					final int endXp = XpCalculator.getRequiredXpPerInterval(startXp, LocalDate.parse(timeToMaxConfig.targetDate()), timeToMaxConfig.trackingInterval());
 
-					// Remove maxed skills from tracking
-					if (currentLevel >= Experience.MAX_REAL_LEVEL)
-					{
-						skillIterator.remove();
-						xpState.unInitializeSkill(skill);
-						log.debug("Removed maxed skill from tracking: {}", skill.getName());
-						continue;
-					}
-
-					final int startGoalXp = (int) save.skills.get(skill).startXp;
-					final int endGoalXp = startGoalXp + XpCalculator.getRequiredXpPerInterval(startGoalXp, LocalDate.parse(timeToMaxConfig.targetDate()), timeToMaxConfig.trackingInterval());
-
-					XpStateSingle x = xpState.getSkill(skill);
-					xpState.updateSkill(skill, x.getCurrentXp(), startGoalXp, endGoalXp);
-					x.updateGoals(x.getCurrentXp(), startGoalXp, endGoalXp);
+					XpStateSingle skillState = xpState.getSkill(skill);
+					skillState.updateGoals(skillState.getCurrentXp(), startXp, endXp);
 				}
 
 				// apply state to the panel
@@ -468,18 +455,6 @@ public class TimeToMaxPlugin extends Plugin
 
 			// Initialize all non-maxed skills
 			initializeNonMaxedSkills();
-
-			// Initialize the tracker with the initial xp if not already initialized
-			for (Skill skill : Skill.values())
-			{
-				if (!xpState.isInitialized(skill))
-				{
-					final int currentXp = client.getSkillExperience(skill);
-					// goal exps are not necessary for skill initialization
-					XpUpdateResult xpUpdateResult = xpState.updateSkill(skill, currentXp, -1, -1);
-					assert xpUpdateResult == XpUpdateResult.INITIALIZED;
-				}
-			}
 
 			// Check for xp gained while logged out
 			for (Skill skill : Skill.values())
@@ -508,6 +483,18 @@ public class TimeToMaxPlugin extends Plugin
 				}
 			}
 
+			// Initialize the tracker with the initial xp if not already initialized
+			for (Skill skill : Skill.values())
+			{
+				if (!xpState.isInitialized(skill))
+				{
+					final int currentXp = client.getSkillExperience(skill);
+					// goal exps are not necessary for skill initialization
+					XpUpdateResult xpUpdateResult = xpState.updateSkill(skill, currentXp, -1, -1);
+					assert xpUpdateResult == XpUpdateResult.INITIALIZED;
+				}
+			}
+
 			// Initialize the overall xp
 			if (!xpState.isOverallInitialized())
 			{
@@ -517,7 +504,23 @@ public class TimeToMaxPlugin extends Plugin
 			}
 		}
 
-		xpPanel.updateTotal(xpState.getTotalSnapshot());
+		// Check for new interval for each skill, then redraw if necessary
+		for (Skill skill : Skill.values())
+		{
+			if (XpCalculator.shouldStartNewPeriod(skill, timeToMaxConfig.trackingInterval()) && !(client.getRealSkillLevel(skill) >= Experience.MAX_REAL_LEVEL))
+			{
+				log.debug("Interval change detected for skill {}", skill.getName());
+				log.debug("Uninitializing skill: {}", skill.getName());
+				xpState.unInitializeSkill(skill);
+				XpCalculator.recordTargetStartXp(skill,
+					client.getSkillExperience(skill),
+					LocalDate.parse(timeToMaxConfig.targetDate()),
+					timeToMaxConfig.trackingInterval());
+
+				xpState.unInitializeOverall();
+				initializeTracker = 1;
+			}
+		}
 	}
 
 	private void initializeNonMaxedSkills()
@@ -537,14 +540,8 @@ public class TimeToMaxPlugin extends Plugin
 				x.updateGoals(x.getCurrentXp(), currentXp, endGoalXp);
 
 				xpPanel.updateSkillExperience(true, false, skill, xpState.getSkillSnapshot(skill));
-				// Remove any existing tracking for maxed skills
-			}
-			else if (currentLevel >= Experience.MAX_REAL_LEVEL && xpState.isInitialized(skill))
-			{
-				xpState.unInitializeSkill(skill);
-				xpPanel.resetSkill(skill);
-				removeOverlay(skill);
-				log.debug("Removed tracking for maxed skill: {}", skill.getName());
+				xpState.updateSkill(skill, currentXp, XpCalculator.getTargetStartXp(skill), endGoalXp);
+				xpState.addSkillOrder(skill);
 			}
 		}
 	}
@@ -564,7 +561,7 @@ public class TimeToMaxPlugin extends Plugin
 		// Get skill from menu option, eg. "View <col=ff981f>Attack</col> guide"
 		final String skillText = event.getOption().split(" ")[1];
 		final Skill skill;
-		
+
 		try
 		{
 			skill = Skill.valueOf(Text.removeTags(skillText).toUpperCase());
@@ -573,7 +570,7 @@ public class TimeToMaxPlugin extends Plugin
 		{
 			return;
 		}
-		client.createMenuEntry(-1)
+		client.getMenu().createMenuEntry(-1)
 			.setTarget(skillText)
 			.setOption(hasOverlay(skill) ? MENUOP_REMOVE_CANVAS_TRACKER : MENUOP_ADD_CANVAS_TRACKER)
 			.setType(MenuAction.RUNELITE)
@@ -596,7 +593,6 @@ public class TimeToMaxPlugin extends Plugin
 		if (commandExecuted.getCommand().equals("ttmreset"))
 		{
 			handleTTMReset();
-			initializeNonMaxedSkills();
 		}
 	}
 
@@ -759,8 +755,56 @@ public class TimeToMaxPlugin extends Plugin
 	private void handleTTMReset()
 	{
 		log.info("TTM Reset command triggered");
-		resetState();
+		resetAndInitState();
+		for (Skill s : Skill.values())
+		{
+			xpState.unInitializeSkill(s);
+		}
+		xpState.unInitializeOverall();
+		XpSave save = new XpSave();
+		saveSaveState(configManager.getRSProfileKey(), save);
 		initializeTracker = 1;
 		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "TTM has been reset.", null);
+	}
+
+	@Subscribe
+	public void onConfigChanged(ConfigChanged event)
+	{
+		if (!"timeToMax".equals(event.getGroup()))
+		{
+			return;
+		}
+
+		// Check if the changed key is one we need to respond to
+		if ("targetDate".equals(event.getKey()) || "trackingInterval".equals(event.getKey()))
+		{
+			log.debug("Config changed: {} - Triggering recalculation", event.getKey());
+
+			// Update the target panel with new config values
+			xpPanel.updateTargetPanel(timeToMaxConfig);
+
+			// Trigger reinitialization for all non-maxed skills
+			if (client.getGameState() == GameState.LOGGED_IN)
+			{
+				// Reset state for non-maxed skills
+				for (Skill skill : Skill.values())
+				{
+					// Skip already maxed skills
+					if (client.getRealSkillLevel(skill) >= Experience.MAX_REAL_LEVEL)
+					{
+						continue;
+					}
+
+					// Uninitialize the skill so it will be reinitialized with new values
+					xpState.unInitializeSkill(skill);
+				}
+
+				// Also uninitialize overall
+				xpState.unInitializeOverall();
+
+				// Set flag to trigger initialization on next game tick
+				initializeTracker = 1;
+			}
+		}
 	}
 }
