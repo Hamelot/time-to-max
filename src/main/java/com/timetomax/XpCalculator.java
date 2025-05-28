@@ -1,6 +1,7 @@
 package com.timetomax;
 
 import java.time.LocalDate;
+import java.time.temporal.ChronoField;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
@@ -16,7 +17,7 @@ public class XpCalculator
 
 	// Store starting XP for each skill for target tracking
 	private static final Map<Skill, Integer> targetStartXp = new HashMap<>();
-	private static final Map<Skill, LocalDate> periodStartDates = new HashMap<>();
+	private static final Map<Skill, LocalDate> intervalStartDates = new HashMap<>();
 	private static LocalDate lastTargetDate = null;
 
 	/**
@@ -28,7 +29,7 @@ public class XpCalculator
 	 */
 	public static boolean shouldStartNewPeriod(Skill skill, TrackingInterval interval)
 	{
-		LocalDate periodStart = periodStartDates.get(skill);
+		LocalDate periodStart = intervalStartDates.get(skill);
 		if (periodStart == null)
 		{
 			return true;
@@ -62,7 +63,7 @@ public class XpCalculator
 		if (lastTargetDate == null || !lastTargetDate.equals(targetDate))
 		{
 			targetStartXp.clear();
-			periodStartDates.clear();
+			intervalStartDates.clear();
 			lastTargetDate = targetDate;
 		}
 
@@ -70,12 +71,12 @@ public class XpCalculator
 		if (!targetStartXp.containsKey(skill))
 		{
 			targetStartXp.put(skill, Math.max(0, currentXp)); // Initialize tracking
-			periodStartDates.put(skill, LocalDate.now());
+			intervalStartDates.put(skill, LocalDate.now());
 		}
 		else if (shouldStartNewPeriod(skill, interval))
 		{
 			// Only update period start date without modifying targetStartXp or cached values
-			periodStartDates.put(skill, LocalDate.now());
+			intervalStartDates.put(skill, LocalDate.now());
 		}
 	}
 
@@ -167,13 +168,13 @@ public class XpCalculator
 		if (skill == null)
 		{
 			targetStartXp.clear();
-			periodStartDates.clear();
+			intervalStartDates.clear();
 			lastTargetDate = null;
 		}
 		else
 		{
 			targetStartXp.remove(skill);
-			periodStartDates.remove(skill);
+			intervalStartDates.remove(skill);
 		}
 	}
 
@@ -242,5 +243,48 @@ public class XpCalculator
 		// Without access to current XP, we can only check if the starting XP was already at max
 		int startXp = getTargetStartXp(skill);
 		return startXp >= MAX_XP;
+	}
+
+	/**
+	 * Check if a new interval should start based only on the interval type and reference date.
+	 * This is interval-specific but skill-agnostic.
+	 *
+	 * @param interval      The current tracking interval
+	 * @param referenceDate The reference date to compare against
+	 * @return true if a new interval should start
+	 */
+	public static boolean shouldStartNewIntervalForDate(TrackingInterval interval, LocalDate referenceDate)
+	{
+		if (referenceDate == null)
+		{
+			return true;
+		}
+
+		LocalDate now = LocalDate.now();
+		switch (interval)
+		{
+			case DAY:
+				return !now.equals(referenceDate);
+			case WEEK:
+				// Check if the current date is in a different ISO week than the reference date
+				return now.get(ChronoField.ALIGNED_WEEK_OF_YEAR) != referenceDate.get(ChronoField.ALIGNED_WEEK_OF_YEAR)
+						|| now.getYear() != referenceDate.getYear();
+			case MONTH:
+				// Check if the current date is in a different calendar month than the reference date
+				return now.getMonth() != referenceDate.getMonth() || now.getYear() != referenceDate.getYear();
+			default:
+				return true;
+		}
+	}
+
+	/**
+	 * Get the interval start date for a skill
+	 *
+	 * @param skill The skill to get the interval start date for
+	 * @return The interval start date for the skill or null if not set
+	 */
+	public static LocalDate getIntervalStartDate(Skill skill)
+	{
+		return intervalStartDates.get(skill);
 	}
 }

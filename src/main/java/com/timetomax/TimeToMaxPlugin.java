@@ -170,7 +170,6 @@ public class TimeToMaxPlugin extends Plugin
 		overlayManager.removeIf(e -> e instanceof XpInfoBoxOverlay);
 		xpState.reset();
 		clientToolbar.removeNavigation(navButton);
-		chatCommandManager.unregisterCommand("ttmreset");
 	}
 
 	@Subscribe
@@ -408,13 +407,12 @@ public class TimeToMaxPlugin extends Plugin
 		}
 
 		// Calculate goal XP values using the period tracking system
-		final int goalStartXp = XpCalculator.getTargetStartXp(skill);
-
-		// Calculate the goal XP based on target date and interval
-		final int endGoalXp = goalStartXp + XpCalculator.getRequiredXpPerInterval(goalStartXp, targetDate, interval);
+		final int goalStartXp = xpState.getSkillSnapshot(skill).getStartGoalXp();
+		final int intervalXp = XpCalculator.getRequiredXpPerInterval(currentXp, LocalDate.parse(timeToMaxConfig.targetDate()), timeToMaxConfig.trackingInterval());
+		final int goalEndXp = goalStartXp + intervalXp;
 
 		// Update the skill state and UI
-		final XpUpdateResult updateResult = xpState.updateSkill(skill, currentXp, goalStartXp, endGoalXp);
+		final XpUpdateResult updateResult = xpState.updateSkill(skill, currentXp, goalStartXp, goalEndXp);
 		xpPanel.updateSkillExperience(updateResult == XpUpdateResult.UPDATED, xpPauseState.isPaused(skill), skill, xpState.getSkillSnapshot(skill));
 
 		// Also update the total experience
@@ -440,7 +438,7 @@ public class TimeToMaxPlugin extends Plugin
 				for (Skill skill : save.skills.keySet())
 				{
 					final int startXp = XpCalculator.getTargetStartXp(skill);
-					final int endXp = XpCalculator.getRequiredXpPerInterval(startXp, LocalDate.parse(timeToMaxConfig.targetDate()), timeToMaxConfig.trackingInterval());
+					final int endXp = startXp + XpCalculator.getRequiredXpPerInterval(startXp, LocalDate.parse(timeToMaxConfig.targetDate()), timeToMaxConfig.trackingInterval());
 
 					XpStateSingle skillState = xpState.getSkill(skill);
 					skillState.updateGoals(skillState.getCurrentXp(), startXp, endXp);
@@ -504,23 +502,6 @@ public class TimeToMaxPlugin extends Plugin
 			}
 		}
 
-		// Check for new interval for each skill, then redraw if necessary
-		for (Skill skill : Skill.values())
-		{
-			if (XpCalculator.shouldStartNewPeriod(skill, timeToMaxConfig.trackingInterval()) && !(client.getRealSkillLevel(skill) >= Experience.MAX_REAL_LEVEL))
-			{
-				log.debug("Interval change detected for skill {}", skill.getName());
-				log.debug("Uninitializing skill: {}", skill.getName());
-				xpState.unInitializeSkill(skill);
-				XpCalculator.recordTargetStartXp(skill,
-					client.getSkillExperience(skill),
-					LocalDate.parse(timeToMaxConfig.targetDate()),
-					timeToMaxConfig.trackingInterval());
-
-				xpState.unInitializeOverall();
-				initializeTracker = 1;
-			}
-		}
 	}
 
 	private void initializeNonMaxedSkills()
@@ -613,21 +594,6 @@ public class TimeToMaxPlugin extends Plugin
 	)
 	public void tickSkillTimes()
 	{
-		// Ensure XP state is initialized
-		if (xpState == null)
-		{
-			xpState = new XpState();
-			log.debug("Created new XP state in tickSkillTimes");
-
-			// Also try to restore saved state
-			XpSave save = loadSaveState(configManager.getRSProfileKey());
-			if (save != null)
-			{
-				log.debug("Restoring saved XP state in tickSkillTimes");
-				xpState.restore(save);
-			}
-		}
-
 		int pauseSkillAfter = timeToMaxConfig.pauseSkillAfter();
 		// Adjust unpause states
 		for (Skill skill : Skill.values())
@@ -684,6 +650,27 @@ public class TimeToMaxPlugin extends Plugin
 			String profile = configManager.getRSProfileKey();
 			saveSaveState(profile, save);
 			log.debug("Saved XP state for profile: {}", profile);
+		}
+
+		// Check for interval reset - should be skill-agnostic to avoid multiple resets
+		TrackingInterval interval = timeToMaxConfig.trackingInterval();
+		
+		// Find the earliest period start date from any skill
+		LocalDate earliestPeriodStart = null;
+		for (Skill skill : Skill.values())
+		{
+			LocalDate skillPeriodStart = XpCalculator.getIntervalStartDate(skill);
+			if (skillPeriodStart != null && (earliestPeriodStart == null || skillPeriodStart.isBefore(earliestPeriodStart)))
+			{
+				earliestPeriodStart = skillPeriodStart;
+			}
+		}
+		
+		// If we have a period start date and we need to start a new period, trigger reset
+		if (earliestPeriodStart != null && XpCalculator.shouldStartNewIntervalForDate(interval, earliestPeriodStart))
+		{
+			log.info("Interval change detected for {} interval - triggering reset", interval);
+			handleTTMReset();
 		}
 	}
 

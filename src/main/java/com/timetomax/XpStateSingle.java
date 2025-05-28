@@ -136,7 +136,7 @@ class XpStateSingle
 	private long getSecondsTillLevel()
 	{
 		long seconds = getTimeElapsedInSeconds();
-		if (seconds <= 0 || getTotalXpGained() <= 0)
+		if (seconds <= 0 || xpGainedSinceReset <= 0)
 		{
 			return -1;
 		}
@@ -144,7 +144,7 @@ class XpStateSingle
 		// formula is xpRemaining / xpPerSecond
 		// xpPerSecond being total xp gained / seconds
 		// This can be simplified so division is only done once and we can work in whole numbers!
-		return (getXpRemaining() * seconds) / getTotalXpGained();
+		return (getXpRemaining() * seconds) / xpGainedSinceReset;
 	}
 
 	private String getTimeTillLevel(XpGoalTimeType goalTimeType)
@@ -200,8 +200,7 @@ class XpStateSingle
 
 	int getXpHr()
 	{
-		// Use total XP gained for XP/hr calculation
-		return toHourly(getTotalXpGained());
+		return toHourly(xpGainedSinceReset);
 	}
 
 	void resetPerHour()
@@ -259,35 +258,31 @@ class XpStateSingle
 
 	void updateGoals(long currentXp, int goalStartXp, int goalEndXp)
 	{
-		if (goalStartXp < 0 || currentXp > goalEndXp)
-		{
-			startLevelExp = Experience.getXpForLevel(Experience.getLevelForXp((int) currentXp));
-		}
-		else
+		// Since we're calculating start and end goal, we just set the values directly
+		// Default to -1 if the goal is not set
+		if (goalStartXp > 0)
 		{
 			startLevelExp = goalStartXp;
 		}
-
-		// Set end goal XP based on specific goal or next level
-		if (goalEndXp > 0 && currentXp <= goalEndXp)
+		else
 		{
-			// Use the specified goal if it's valid
+			startLevelExp = -1;
+		}
+
+		if (goalEndXp > 0)
+		{
 			endLevelExp = goalEndXp;
 		}
 		else
 		{
-			// Default to next level if no valid goal
-			int currentLevel = Experience.getLevelForXp((int) currentXp);
-			endLevelExp = currentLevel + 1 <= Experience.MAX_VIRT_LEVEL
-				? Experience.getXpForLevel(currentLevel + 1)
-				: Experience.MAX_SKILL_XP;
+			endLevelExp = -1;
 		}
 	}
 
 	public void tick(long delta)
 	{
 		// Track time as long as we have gained XP since baseline
-		if (getTotalXpGained() <= 0)
+		if (xpGainedSinceReset <= 0)
 		{
 			return;
 		}
@@ -299,9 +294,9 @@ class XpStateSingle
 		return XpSnapshotSingle.builder()
 			.startLevel(Experience.getLevelForXp(startLevelExp))
 			.endLevel(Experience.getLevelForXp(endLevelExp))
-			.xpGainedInSession(getTotalXpGained())  // Use total XP gained from baseline
+			.xpGainedInSession(getTotalXpGained())
 			.xpRemainingToGoal(getXpRemaining())
-			.xpPerHour(getXpHr())  // This now uses total XP gained
+			.xpPerHour(getXpHr())
 			.skillProgressToGoal(getSkillProgress())
 			.actionsInSession(actions)
 			.actionsRemainingToGoal(getActionsRemaining())
