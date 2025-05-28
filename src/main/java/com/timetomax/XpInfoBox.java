@@ -344,9 +344,10 @@ class XpInfoBox extends JPanel
 
 			// Always use consistent XP values from the snapshot
 			int goalStartXp = xpSnapshotSingle.getStartGoalXp();
+			int goalEndXp = xpSnapshotSingle.getEndGoalXp();
 			int xpGained = xpSnapshotSingle.getXpGainedInSession();
 			int requiredXp = XpCalculator.getRequiredXpPerInterval(goalStartXp, targetDate, interval);
-			int progressPercent = requiredXp > 0 ? Math.min(100, (int) ((double) xpGained / requiredXp * 100)) : 0;
+			int progressPercent = xpGained > 0 ? Math.min(100, Math.abs((int) ((double) xpGained / (goalEndXp - goalStartXp) * 100))) : 0;
 
 			// Update progress bar
 			progressBar.setValue(progressPercent);
@@ -355,7 +356,7 @@ class XpInfoBox extends JPanel
 			progressBar.setPositions(Collections.emptyList());
 
 			// Set center label based on completion status
-			if (progressPercent >= 100)
+			if (progressPercent == 100)
 			{
 				progressBar.setCenterLabel("Complete");
 				// collapse progress bar if completed
@@ -505,6 +506,13 @@ class XpInfoBox extends JPanel
 			paused = false;
 			pauseSkill.setText("Pause");
 		}
+
+		// Update information labels
+		// Update exp per hour separately, every time (not only when there's an update)
+		topLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel1(), xpSnapshotSingle));
+		topRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel2(), xpSnapshotSingle));
+		bottomLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel3(), xpSnapshotSingle));
+		bottomRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel4(), xpSnapshotSingle));
 	}
 
 	private String htmlLabel(XpPanelLabel panelLabel, XpSnapshotSingle xpSnapshotSingle)
