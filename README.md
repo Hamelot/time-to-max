@@ -47,6 +47,10 @@ A RuneLite plugin that helps you track your progress towards maxing all skills i
 - **::ttmreset**: Reset your XP baseline at any time with the `::ttmreset` command
 - **Confirmation Dialogs**: Prevents accidental resets with confirmation prompts
 
+### Completionist Mode
+
+- **Normal vs Completionist Mode**: Toggle between tracking time to max for level 99 in all skills or achieving 200 million XP in all skills.
+
 ## How to Use
 
 1. Install the plugin through the RuneLite Plugin Hub
