@@ -151,7 +151,8 @@ class XpState
 	 */
 	void initializeSkill(Skill skill, long currentXp)
 	{
-		var targetGoalXp = XpCalculator.getRequiredXpPerInterval((int) currentXp, LocalDate.parse(config.targetDate()), config.trackingInterval());
+		var targetGoalXp = XpCalculator.getRequiredXpPerInterval((int) currentXp, LocalDate.parse(config.targetDate()),
+			config.trackingInterval(), config.maxSkillMode());
 		XpStateSingle state = new XpStateSingle(currentXp);
 
 		state.updateGoals(currentXp, (int) currentXp, (int) (currentXp + targetGoalXp));

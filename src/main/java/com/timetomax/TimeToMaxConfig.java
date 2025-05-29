@@ -37,21 +37,28 @@ import java.time.LocalDate;
 public interface TimeToMaxConfig extends Config
 {
 	@ConfigSection(
-		name = "Target Settings",
-		description = "Settings for target date and tracking interval",
+		name = "Maxing Settings",
+		description = "Settings related to max calculations",
 		position = 0
 	)
-	String targetSection = "target";
+	String maxingSection = "maxing";
+
+	@ConfigSection(
+		name = "Info Label Settings",
+		description = "Settings for the info labels",
+		position = 1
+	)
+	String infoLabelSection = "infolabel";
 
 	@ConfigSection(
 		name = "Overlay",
 		description = "Canvas overlay options.",
-		position = 99
+		position = 2
 	)
 	String overlaySection = "overlay";
 
 	@ConfigItem(
-		section = targetSection,
+		section = maxingSection,
 		position = 0,
 		keyName = "targetDate",
 		name = "Target Date",
@@ -64,7 +71,7 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		section = targetSection,
+		section = maxingSection,
 		position = 1,
 		keyName = "trackingInterval",
 		name = "Tracking Interval",
@@ -76,6 +83,55 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
+		section = maxingSection,
+		position = 2,
+		keyName = "maxSkillMode",
+		name = "Max Skill Mode",
+		description = "Use level 99, or 200m as xp goal"
+	)
+	default MaxSkillMode maxSkillMode()
+	{
+		return MaxSkillMode.NORMAL;
+	}
+
+	@ConfigItem(
+		section = maxingSection,
+		position = 3,
+		keyName = "prioritizeRecentXpSkills",
+		name = "Move recently trained skills to top",
+		description = "Configures whether skills should be organized by most recently gained XP."
+	)
+	default boolean prioritizeRecentXpSkills()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		section = maxingSection,
+		position = 4,
+		keyName = "pinCompletedSkillsToBottom",
+		name = "Pin completed skills to bottom",
+		description = "Configures whether completed skills should be pinned to the bottom of the list."
+	)
+	default boolean pinCompletedSkillsToBottom()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		section = maxingSection,
+		position = 5,
+		keyName = "collapseCompletedSkills",
+		name = "Collapse completed skills",
+		description = "Configures whether completed skills should be collapsed."
+	)
+	default boolean collapseCompletedSkills()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		section = infoLabelSection,
 		position = 0,
 		keyName = "logoutPausing",
 		name = "Pause on logout",
@@ -87,7 +143,8 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 2,
+		section = infoLabelSection,
+		position = 1,
 		keyName = "pauseSkillAfter",
 		name = "Auto pause after",
 		description = "Configures how many minutes passes before pausing a skill while in game and there's no XP, 0 means disabled."
@@ -99,7 +156,8 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 3,
+		section = infoLabelSection,
+		position = 2,
 		keyName = "resetSkillRateAfter",
 		name = "Auto reset after",
 		description = "Configures how many minutes passes before resetting a skill's per hour rates while in game and there's no XP, 0 means disabled."
@@ -111,43 +169,8 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 4,
-		keyName = "skillTabOverlayMenuOptions",
-		name = "Add skill tab canvas menu option",
-		description = "Configures whether a menu option to show/hide canvas XP trackers will be added to skills on the skill tab.",
-		section = overlaySection
-	)
-	default boolean skillTabOverlayMenuOptions()
-	{
-		return true;
-	}
-
-	@ConfigItem(
-		position = 5,
-		keyName = "onScreenDisplayMode",
-		name = "On-screen tracker display mode (top)",
-		description = "Configures the information displayed in the first line of on-screen XP overlays.",
-		section = overlaySection
-	)
-	default XpPanelLabel onScreenDisplayMode()
-	{
-		return XpPanelLabel.XP_GAINED;
-	}
-
-	@ConfigItem(
-		position = 6,
-		keyName = "onScreenDisplayModeBottom",
-		name = "On-screen tracker display mode (bottom)",
-		description = "Configures the information displayed in the second line of on-screen XP overlays.",
-		section = overlaySection
-	)
-	default XpPanelLabel onScreenDisplayModeBottom()
-	{
-		return XpPanelLabel.XP_HOUR;
-	}
-
-	@ConfigItem(
-		position = 7,
+		section = infoLabelSection,
+		position = 3,
 		keyName = "xpPanelLabel1",
 		name = "Top-left XP info label",
 		description = "Configures the information displayed in the top-left of XP info box."
@@ -158,7 +181,8 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 8,
+		section = infoLabelSection,
+		position = 4,
 		keyName = "xpPanelLabel2",
 		name = "Top-right XP info label",
 		description = "Configures the information displayed in the top-right of XP info box."
@@ -170,7 +194,8 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 9,
+		section = infoLabelSection,
+		position = 5,
 		keyName = "xpPanelLabel3",
 		name = "Bottom-left XP info label",
 		description = "Configures the information displayed in the bottom-left of XP info box."
@@ -181,7 +206,8 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 10,
+		section = infoLabelSection,
+		position = 6,
 		keyName = "xpPanelLabel4",
 		name = "Bottom-right XP info label",
 		description = "Configures the information displayed in the bottom-right of XP info box."
@@ -192,7 +218,8 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 11,
+		section = infoLabelSection,
+		position = 7,
 		keyName = "progressBarLabel",
 		name = "Progress bar label",
 		description = "Configures the info box progress bar to show time to goal or percentage complete."
@@ -203,7 +230,8 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 12,
+		section = infoLabelSection,
+		position = 8,
 		keyName = "progressBarTooltipLabel",
 		name = "Tooltip label",
 		description = "Configures the info box progress bar tooltip to show time to goal or percentage complete."
@@ -214,35 +242,38 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 13,
-		keyName = "prioritizeRecentXpSkills",
-		name = "Move recently trained skills to top",
-		description = "Configures whether skills should be organized by most recently gained XP."
+		position = 0,
+		keyName = "skillTabOverlayMenuOptions",
+		name = "Add skill tab canvas menu option",
+		description = "Configures whether a menu option to show/hide canvas XP trackers will be added to skills on the skill tab.",
+		section = overlaySection
 	)
-	default boolean prioritizeRecentXpSkills()
+	default boolean skillTabOverlayMenuOptions()
 	{
 		return true;
 	}
 
 	@ConfigItem(
-		position = 14,
-		keyName = "pinCompletedSkillsToBottom",
-		name = "Pin completed skills to bottom",
-		description = "Configures whether completed skills should be pinned to the bottom of the list."
+		position = 1,
+		keyName = "onScreenDisplayMode",
+		name = "On-screen tracker display mode (top)",
+		description = "Configures the information displayed in the first line of on-screen XP overlays.",
+		section = overlaySection
 	)
-	default boolean pinCompletedSkillsToBottom()
+	default XpPanelLabel onScreenDisplayMode()
 	{
-		return true;
+		return XpPanelLabel.XP_GAINED;
 	}
 
 	@ConfigItem(
-		position = 15,
-		keyName = "collapseCompletedSkills",
-		name = "Collapse completed skills",
-		description = "Configures whether completed skills should be collapsed."
+		position = 2,
+		keyName = "onScreenDisplayModeBottom",
+		name = "On-screen tracker display mode (bottom)",
+		description = "Configures the information displayed in the second line of on-screen XP overlays.",
+		section = overlaySection
 	)
-	default boolean collapseCompletedSkills()
+	default XpPanelLabel onScreenDisplayModeBottom()
 	{
-		return true;
+		return XpPanelLabel.XP_HOUR;
 	}
 }

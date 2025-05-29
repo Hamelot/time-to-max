@@ -13,7 +13,8 @@ import net.runelite.api.Skill;
 public class XpCalculator
 {
 	// XP required for level 99 in each skill
-	public static final int MAX_XP = 13_034_431;
+	public static final int LEVEL_99_XP = 13_034_431;
+	public static final int MAX_XP = 200_000_000;
 
 	// Store starting XP for each skill for target tracking
 	private static final Map<Skill, Integer> targetStartXp = new HashMap<>();
@@ -104,18 +105,39 @@ public class XpCalculator
 	 * @param targetDate Target date to reach max level
 	 * @return XP required per day
 	 */
-	public static int getRequiredXpPerDay(int startXp, LocalDate targetDate)
+	public static int getRequiredXpPerDay(int startXp, LocalDate targetDate, MaxSkillMode maxSkillMode)
 	{
 		long daysUntilTarget = ChronoUnit.DAYS.between(LocalDate.now(), targetDate);
 		if (daysUntilTarget <= 0)
 		{
-			return MAX_XP - startXp; // Target date is today or in the past
+			if (maxSkillMode == MaxSkillMode.NORMAL)
+			{
+				return LEVEL_99_XP - startXp; // Target date is today or in the past
+			}
+			else if (maxSkillMode == MaxSkillMode.COMPLETIONIST)
+			{
+				return MAX_XP - startXp;
+			}
 		}
 
-		int xpRemaining = MAX_XP - startXp;
-		if (xpRemaining <= 0)
+		int xpRemaining = 0;
+
+		if (maxSkillMode == MaxSkillMode.NORMAL)
 		{
-			return 0;
+			xpRemaining = LEVEL_99_XP - startXp;
+			if (xpRemaining <= 0)
+			{
+				return 0;
+			}
+		}
+		else if (maxSkillMode == MaxSkillMode.COMPLETIONIST)
+		{
+			xpRemaining = MAX_XP - startXp;
+			if (xpRemaining <= 0)
+			{
+				return 0;
+			}
+
 		}
 
 		return (int) Math.ceil((double) xpRemaining / daysUntilTarget);
@@ -129,9 +151,9 @@ public class XpCalculator
 	 * @param interval   The interval (day, week, month)
 	 * @return XP required per interval
 	 */
-	public static int getRequiredXpPerInterval(int startXp, LocalDate targetDate, TrackingInterval interval)
+	public static int getRequiredXpPerInterval(int startXp, LocalDate targetDate, TrackingInterval interval, MaxSkillMode maxSkillMode)
 	{
-		int xpPerDay = getRequiredXpPerDay(startXp, targetDate);
+		int xpPerDay = getRequiredXpPerDay(startXp, targetDate, maxSkillMode);
 
 		switch (interval)
 		{
@@ -196,10 +218,10 @@ public class XpCalculator
 	 * @param currentXp The current XP for the skill
 	 * @return true if the skill has reached the max XP or its target, false otherwise
 	 */
-	public static boolean isSkillTargetMet(Skill skill, int currentXp, LocalDate targetDate, TrackingInterval interval)
+	public static boolean isSkillTargetMet(Skill skill, int currentXp, LocalDate targetDate, TrackingInterval interval, MaxSkillMode maxSkillMode)
 	{
 		// Check if the skill has reached MAX_XP for level 99
-		if (currentXp >= MAX_XP)
+		if (currentXp >= LEVEL_99_XP)
 		{
 			return true;
 		}
@@ -223,7 +245,7 @@ public class XpCalculator
 		// The target is met if we've reached the daily/weekly/monthly XP goal
 		// Note: This is a simplification. Ideally, we'd check if the player has met
 		// their goal for the current interval (day/week/month).
-		return xpGained >= getRequiredXpPerInterval(targetStartXp, targetDate, interval);
+		return xpGained >= getRequiredXpPerInterval(targetStartXp, targetDate, interval, maxSkillMode);
 	}
 
 	/**
@@ -242,7 +264,7 @@ public class XpCalculator
 
 		// Without access to current XP, we can only check if the starting XP was already at max
 		int startXp = getTargetStartXp(skill);
-		return startXp >= MAX_XP;
+		return startXp >= LEVEL_99_XP;
 	}
 
 	/**
