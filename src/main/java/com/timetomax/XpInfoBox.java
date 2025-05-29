@@ -313,10 +313,11 @@ class XpInfoBox extends JPanel
 				{
 					LocalDate targetDate = LocalDate.parse(timeToMaxConfig.targetDate());
 					TrackingInterval interval = timeToMaxConfig.trackingInterval();
+					MaxSkillMode maxSkillMode = timeToMaxConfig.maxSkillMode();
 
 					// If skill target is met, move to bottom of panel
 					var startGoalXp = xpSnapshotSingle.getStartGoalXp();
-					if (Math.max(0, currentXp - startGoalXp) >= XpCalculator.getRequiredXpPerInterval(startGoalXp, targetDate, interval))
+					if (Math.max(0, currentXp - startGoalXp) >= XpCalculator.getRequiredXpPerInterval(startGoalXp, targetDate, interval, maxSkillMode))
 					{
 						panel.setComponentZOrder(this, panel.getComponentCount() - 1);
 						panel.revalidate();
@@ -332,6 +333,7 @@ class XpInfoBox extends JPanel
 
 			// Get settings and XP values
 			TrackingInterval interval = timeToMaxConfig.trackingInterval();
+			MaxSkillMode maxSkillMode = timeToMaxConfig.maxSkillMode();
 			LocalDate targetDate;
 			try
 			{
@@ -346,7 +348,7 @@ class XpInfoBox extends JPanel
 			int goalStartXp = xpSnapshotSingle.getStartGoalXp();
 			int goalEndXp = xpSnapshotSingle.getEndGoalXp();
 			int xpGained = xpSnapshotSingle.getXpGainedInSession();
-			int requiredXp = XpCalculator.getRequiredXpPerInterval(goalStartXp, targetDate, interval);
+			int requiredXp = XpCalculator.getRequiredXpPerInterval(goalStartXp, targetDate, interval, maxSkillMode);
 			int progressPercent = xpGained > 0 ? Math.min(100, Math.abs((int) ((double) xpGained / (goalEndXp - goalStartXp) * 100))) : 0;
 
 			// Update progress bar
