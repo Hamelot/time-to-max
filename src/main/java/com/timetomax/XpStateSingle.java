@@ -46,6 +46,10 @@ class XpStateSingle
 	private long startXp;
 
 	@Getter
+	@Setter
+	private long endXp;
+
+	@Getter
 	private int xpGainedSinceReset = 0;
 
 	private int xpGainedBeforeReset = 0;
@@ -58,6 +62,12 @@ class XpStateSingle
 	private long lastChangeMillis;
 	private int startLevelExp = 0;
 	private int endLevelExp = 0;
+
+	XpStateSingle(long startXp, long endXp)
+	{
+		this.startXp = startXp;
+		this.endXp = endXp;
+	}
 
 	XpStateSingle(long startXp)
 	{
@@ -256,27 +266,13 @@ class XpStateSingle
 		return true;
 	}
 
-	void updateGoals(long currentXp, int goalStartXp, int goalEndXp)
+	void updateGoals(int goalStartXp, int goalEndXp)
 	{
 		// Since we're calculating start and end goal, we just set the values directly
 		// Default to -1 if the goal is not set
-		if (goalStartXp > 0)
-		{
-			startLevelExp = goalStartXp;
-		}
-		else
-		{
-			startLevelExp = -1;
-		}
+		startLevelExp = Math.max(goalStartXp, 0);
 
-		if (goalEndXp > 0)
-		{
-			endLevelExp = goalEndXp;
-		}
-		else
-		{
-			endLevelExp = -1;
-		}
+		endLevelExp = Math.max(goalEndXp, 0);
 	}
 
 	public void tick(long delta)
@@ -313,6 +309,7 @@ class XpStateSingle
 	{
 		XpSaveSingle save = new XpSaveSingle();
 		save.startXp = startXp;
+		save.endXp = endXp;
 		save.xpGainedBeforeReset = xpGainedBeforeReset;
 		save.xpGainedSinceReset = xpGainedSinceReset;
 		save.time = skillTime;
@@ -322,6 +319,7 @@ class XpStateSingle
 	void restore(XpSaveSingle save)
 	{
 		startXp = save.startXp;
+		endXp = save.endXp;
 		xpGainedBeforeReset = save.xpGainedBeforeReset;
 		xpGainedSinceReset = save.xpGainedSinceReset;
 		skillTime = save.time;

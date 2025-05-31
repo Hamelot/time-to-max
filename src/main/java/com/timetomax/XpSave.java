@@ -44,6 +44,8 @@ class XpSaveSingle
 {
 	@SerializedName("s")
 	long startXp;
+	@SerializedName("e")
+	long endXp;
 	@SerializedName("br")
 	int xpGainedBeforeReset;
 	@SerializedName("ar")

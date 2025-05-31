@@ -349,7 +349,7 @@ class XpInfoBox extends JPanel
 			int goalEndXp = xpSnapshotSingle.getEndGoalXp();
 			int xpGained = xpSnapshotSingle.getXpGainedInSession();
 			int requiredXp = XpCalculator.getRequiredXpPerInterval(goalStartXp, targetDate, interval, maxSkillMode);
-			int progressPercent = xpGained > 0 ? Math.min(100, Math.abs((int) ((double) xpGained / (goalEndXp - goalStartXp) * 100))) : 0;
+			int progressPercent = xpGained > 0 ? Math.min(100, Math.abs((int) ((double) xpGained / requiredXp * 100))) : 0;
 
 			// Update progress bar
 			progressBar.setValue(progressPercent);
@@ -406,94 +406,9 @@ class XpInfoBox extends JPanel
 
 			// Update XP panel labels
 			topLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel1(), xpSnapshotSingle));
-
-			// For the XP_LEFT label, show remaining XP needed for this interval
-			if (timeToMaxConfig.xpPanelLabel2() == XpPanelLabel.XP_LEFT)
-			{
-				String key = XpPanelLabel.XP_LEFT.getKey() + ": ";
-				int remainingXpForInterval = Math.max(0, requiredXp - xpGained);
-				String value = QuantityFormatter.quantityToRSDecimalStack(remainingXpForInterval, true);
-				topRightStat.setText(htmlLabel(key, value));
-			}
-			else
-			{
-				topRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel2(), xpSnapshotSingle));
-			}
-
-			// For ACTIONS_LEFT label, make sure it shows actions to reach the interval goal
-			if (timeToMaxConfig.xpPanelLabel1() == XpPanelLabel.ACTIONS_LEFT ||
-				timeToMaxConfig.xpPanelLabel2() == XpPanelLabel.ACTIONS_LEFT ||
-				timeToMaxConfig.xpPanelLabel3() == XpPanelLabel.ACTIONS_LEFT ||
-				timeToMaxConfig.xpPanelLabel4() == XpPanelLabel.ACTIONS_LEFT)
-			{
-				String key = XpPanelLabel.ACTIONS_LEFT.getKey() + ": ";
-				// Use the actions remaining from the snapshot which is now calculated correctly
-				String value = xpSnapshotSingle.getActionsRemainingToGoal() == Integer.MAX_VALUE
-					? "N/A"
-					: QuantityFormatter.quantityToRSDecimalStack(xpSnapshotSingle.getActionsRemainingToGoal(), true);
-
-				// Update all labels configured to show Actions left
-				if (timeToMaxConfig.xpPanelLabel1() == XpPanelLabel.ACTIONS_LEFT)
-				{
-					topLeftStat.setText(htmlLabel(key, value));
-				}
-				if (timeToMaxConfig.xpPanelLabel2() == XpPanelLabel.ACTIONS_LEFT)
-				{
-					topRightStat.setText(htmlLabel(key, value));
-				}
-				if (timeToMaxConfig.xpPanelLabel3() == XpPanelLabel.ACTIONS_LEFT)
-				{
-					bottomLeftStat.setText(htmlLabel(key, value));
-				}
-				if (timeToMaxConfig.xpPanelLabel4() == XpPanelLabel.ACTIONS_LEFT)
-				{
-					bottomRightStat.setText(htmlLabel(key, value));
-				}
-			}
-
-			// For XP_GAINED label, consistently show XP from snapshot
-			if (timeToMaxConfig.xpPanelLabel1() == XpPanelLabel.XP_GAINED ||
-				timeToMaxConfig.xpPanelLabel2() == XpPanelLabel.XP_GAINED ||
-				timeToMaxConfig.xpPanelLabel3() == XpPanelLabel.XP_GAINED ||
-				timeToMaxConfig.xpPanelLabel4() == XpPanelLabel.XP_GAINED)
-			{
-				String key = XpPanelLabel.XP_GAINED.getKey() + ": ";
-				String value = QuantityFormatter.quantityToRSDecimalStack(xpGained, true);
-
-				// Update all labels configured to show XP gained
-				if (timeToMaxConfig.xpPanelLabel1() == XpPanelLabel.XP_GAINED)
-				{
-					topLeftStat.setText(htmlLabel(key, value));
-				}
-				if (timeToMaxConfig.xpPanelLabel2() == XpPanelLabel.XP_GAINED)
-				{
-					topRightStat.setText(htmlLabel(key, value));
-				}
-				if (timeToMaxConfig.xpPanelLabel3() == XpPanelLabel.XP_GAINED)
-				{
-					bottomLeftStat.setText(htmlLabel(key, value));
-				}
-				else
-				{
-					bottomLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel3(), xpSnapshotSingle));
-				}
-				if (timeToMaxConfig.xpPanelLabel4() == XpPanelLabel.XP_GAINED)
-				{
-					bottomRightStat.setText(htmlLabel(key, value));
-				}
-				else
-				{
-					bottomRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel4(), xpSnapshotSingle));
-				}
-			}
-			else
-			{
-				// Default behavior for other label types
-				topLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel1(), xpSnapshotSingle));
-				topRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel2(), xpSnapshotSingle));
-				bottomLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel3(), xpSnapshotSingle));
-				bottomRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel4(), xpSnapshotSingle));
-			}
+			topRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel2(), xpSnapshotSingle));
+			bottomLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel3(), xpSnapshotSingle));
+			bottomRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel4(), xpSnapshotSingle));
 		}
 		// Handle paused state changes
 		else if (!paused && skillPaused)

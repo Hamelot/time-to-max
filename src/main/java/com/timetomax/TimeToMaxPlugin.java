@@ -137,7 +137,7 @@ public class TimeToMaxPlugin extends Plugin
 		final BufferedImage icon = ImageUtil.loadImageResource(getClass(), "timetomax.png");
 
 		navButton = NavigationButton.builder()
-			.tooltip("XP Tracker")
+			.tooltip("Time to Max")
 			.icon(icon)
 			.priority(3)
 			.panel(xpPanel)
@@ -404,9 +404,6 @@ public class TimeToMaxPlugin extends Plugin
 		}
 		TrackingInterval interval = timeToMaxConfig.trackingInterval();
 
-		// Record the XP for period tracking if needed
-		XpCalculator.recordTargetStartXp(skill, currentXp, targetDate, interval);
-
 		// If this is the initial skill sync on login, initialize but don't process
 		if (initializeTracker > 0)
 		{
@@ -414,16 +411,23 @@ public class TimeToMaxPlugin extends Plugin
 		}
 
 		// Calculate goal XP values using the period tracking system
-		final int goalStartXp = xpState.getSkillSnapshot(skill).getStartGoalXp();
-		final int intervalXp = XpCalculator.getRequiredXpPerInterval(currentXp,
-			LocalDate.parse(timeToMaxConfig.targetDate()), timeToMaxConfig.trackingInterval(),
+		final int goalStartXp = (int) getSkillState(skill).getStartXp();
+		final int intervalXp = XpCalculator.getRequiredXpPerInterval(
+			goalStartXp,
+			LocalDate.parse(timeToMaxConfig.targetDate()),
+			timeToMaxConfig.trackingInterval(),
 			timeToMaxConfig.maxSkillMode());
 		final int goalEndXp = goalStartXp + intervalXp;
 
 		// Update the skill state and UI
-		final XpUpdateResult updateResult = xpState.updateSkill(skill, currentXp, goalStartXp, goalEndXp);
+		final XpUpdateResult updateResult = xpState.updateSkill(
+			skill,
+			currentXp,
+			goalStartXp,
+			goalEndXp);
+
 		xpPanel.updateSkillExperience(updateResult == XpUpdateResult.UPDATED, xpPauseState.isPaused(skill),
-			skill, xpState.getSkillSnapshot(skill));
+			skill, getSkillSnapshot(skill));
 
 		// Also update the total experience
 		xpState.updateOverall(client.getOverallExperience());
@@ -447,13 +451,8 @@ public class TimeToMaxPlugin extends Plugin
 
 				for (Skill skill : save.skills.keySet())
 				{
-					final int startXp = XpCalculator.getTargetStartXp(skill);
-					final int endXp = startXp + XpCalculator.getRequiredXpPerInterval(startXp,
-						LocalDate.parse(timeToMaxConfig.targetDate()), timeToMaxConfig.trackingInterval(),
-						timeToMaxConfig.maxSkillMode());
-
-					XpStateSingle skillState = xpState.getSkill(skill);
-					skillState.updateGoals(skillState.getCurrentXp(), startXp, endXp);
+					XpStateSingle skillState = getSkillState(skill);
+					skillState.updateGoals((int) skillState.getStartXp(), (int) skillState.getEndXp());
 				}
 
 				// apply state to the panel
@@ -474,7 +473,7 @@ public class TimeToMaxPlugin extends Plugin
 					continue;
 				}
 
-				XpStateSingle skillState = xpState.getSkill(skill);
+				XpStateSingle skillState = getSkillState(skill);
 				final int currentXp = client.getSkillExperience(skill);
 				if (skillState.getCurrentXp() != currentXp)
 				{
@@ -542,20 +541,22 @@ public class TimeToMaxPlugin extends Plugin
 		}
 	}
 
-	private void setCalculatedSkillExperience(Skill skill, int currentXp)
+	private void setCalculatedSkillExperience(Skill skill, int startXp)
 	{
 		// Calculate the interval goal based on current XP
-		final int intervalXp = XpCalculator.getRequiredXpPerInterval(currentXp,
-			LocalDate.parse(timeToMaxConfig.targetDate()), timeToMaxConfig.trackingInterval(),
+		final int intervalXp = XpCalculator.getRequiredXpPerInterval(
+			startXp,
+			LocalDate.parse(timeToMaxConfig.targetDate()),
+			timeToMaxConfig.trackingInterval(),
 			timeToMaxConfig.maxSkillMode());
-		final int endGoalXp = currentXp + intervalXp;
+		final int endGoalXp = startXp + intervalXp;
 
-		XpStateSingle x = xpState.getSkill(skill);
-		x.updateGoals(x.getCurrentXp(), currentXp, endGoalXp);
+		XpStateSingle x = getSkillState(skill);
+		x.updateGoals(startXp, endGoalXp);
+		x.update(client.getSkillExperience(skill));
 
-		xpPanel.updateSkillExperience(true, false, skill, xpState.getSkillSnapshot(skill));
-		xpState.updateSkill(skill, currentXp, XpCalculator.getTargetStartXp(skill), endGoalXp);
-		xpState.addSkillOrder(skill);
+		xpPanel.updateSkillExperience(true, xpPauseState.isPaused(skill),
+			skill, getSkillSnapshot(skill));
 	}
 
 	@Subscribe
@@ -604,7 +605,9 @@ public class TimeToMaxPlugin extends Plugin
 	{
 		if (commandExecuted.getCommand().equals("ttmreset"))
 		{
+			log.info("TTM Reset command triggered by command");
 			handleTTMReset();
+			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "TTM has been reset by user.", null);
 		}
 	}
 
@@ -702,6 +705,8 @@ public class TimeToMaxPlugin extends Plugin
 		{
 			log.info("Interval change detected for {} interval - triggering reset", interval);
 			handleTTMReset();
+			String message = String.format("New %s has been detected.", interval);
+			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", message, null);
 		}
 	}
 
@@ -710,7 +715,7 @@ public class TimeToMaxPlugin extends Plugin
 		// Rebuild calculated values like xp/hr in panel
 		for (Skill skill : Skill.values())
 		{
-			xpPanel.updateSkillExperience(false, xpPauseState.isPaused(skill), skill, xpState.getSkillSnapshot(skill));
+			xpPanel.updateSkillExperience(false, xpPauseState.isPaused(skill), skill, getSkillSnapshot(skill));
 		}
 
 		xpPanel.updateTotal(xpState.getTotalSnapshot());
@@ -720,7 +725,7 @@ public class TimeToMaxPlugin extends Plugin
 	{
 		if (pause ? xpPauseState.pauseSkill(skill) : xpPauseState.unpauseSkill(skill))
 		{
-			xpPanel.updateSkillExperience(false, xpPauseState.isPaused(skill), skill, xpState.getSkillSnapshot(skill));
+			xpPanel.updateSkillExperience(false, xpPauseState.isPaused(skill), skill, getSkillSnapshot(skill));
 		}
 	}
 
@@ -772,7 +777,6 @@ public class TimeToMaxPlugin extends Plugin
 
 	private void handleTTMReset()
 	{
-		log.info("TTM Reset command triggered");
 		resetAndInitState();
 		for (Skill s : Skill.values())
 		{
@@ -782,7 +786,6 @@ public class TimeToMaxPlugin extends Plugin
 		XpSave save = new XpSave();
 		saveSaveState(configManager.getRSProfileKey(), save);
 		initializeTracker = 1;
-		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "TTM has been reset.", null);
 	}
 
 	@Subscribe
@@ -809,6 +812,7 @@ public class TimeToMaxPlugin extends Plugin
 				{
 					final int currentXp = client.getSkillExperience(skill);
 					final int currentLevel = Experience.getLevelForXp(currentXp);
+					final int startXp = getSkillState(skill).getStartXp() == -1 ? currentXp : (int) getSkillState(skill).getStartXp();
 
 					if (timeToMaxConfig.maxSkillMode() == MaxSkillMode.NORMAL)
 					{
@@ -821,21 +825,26 @@ public class TimeToMaxPlugin extends Plugin
 						else
 						{
 							// Recalculate goals for skills under level 99
-							setCalculatedSkillExperience(skill, currentXp);
+							setCalculatedSkillExperience(skill, startXp);
 						}
 					}
 					else if (timeToMaxConfig.maxSkillMode() == MaxSkillMode.COMPLETIONIST)
 					{
 						// Ensure skills under 200m XP are displayed and goals recalculated
-						if (currentXp < Experience.MAX_SKILL_XP)
+						if (currentXp == Experience.MAX_SKILL_XP)
 						{
-							setCalculatedSkillExperience(skill, currentXp);
+							xpPanel.resetSkill(skill);
+							removeOverlay(skill);
+						}
+						else
+						{
+							setCalculatedSkillExperience(skill, startXp);
 						}
 					}
 				}
 
 				// Update the panel to reflect the changes
-				rebuildSkills();
+				//rebuildSkills();
 			}
 		}
 	}
