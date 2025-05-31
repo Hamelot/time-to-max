@@ -19,7 +19,6 @@ public class XpCalculator
 	// Store starting XP for each skill for target tracking
 	private static final Map<Skill, Integer> targetStartXp = new HashMap<>();
 	private static final Map<Skill, LocalDate> intervalStartDates = new HashMap<>();
-	private static LocalDate lastTargetDate = null;
 
 	/**
 	 * Check if a new period should start for a skill based on the interval
@@ -47,37 +46,6 @@ public class XpCalculator
 				return ChronoUnit.MONTHS.between(periodStart, now) > 0;
 			default:
 				return true;
-		}
-	}
-
-	/**
-	 * Records the starting XP for target tracking and updates period tracking
-	 *
-	 * @param skill      The skill to record
-	 * @param currentXp  The current XP for the skill
-	 * @param targetDate The target date (to detect changes)
-	 * @param interval   The tracking interval
-	 */
-	public static void recordTargetStartXp(Skill skill, int currentXp, LocalDate targetDate, TrackingInterval interval)
-	{
-		// Reset tracking if target date changes
-		if (lastTargetDate == null || !lastTargetDate.equals(targetDate))
-		{
-			targetStartXp.clear();
-			intervalStartDates.clear();
-			lastTargetDate = targetDate;
-		}
-
-		// Check if we need to start a new period or initialize tracking
-		if (!targetStartXp.containsKey(skill))
-		{
-			targetStartXp.put(skill, Math.max(0, currentXp)); // Initialize tracking
-			intervalStartDates.put(skill, LocalDate.now());
-		}
-		else if (shouldStartNewPeriod(skill, interval))
-		{
-			// Only update period start date without modifying targetStartXp or cached values
-			intervalStartDates.put(skill, LocalDate.now());
 		}
 	}
 
@@ -149,6 +117,7 @@ public class XpCalculator
 	 * @param startXp    Start XP in the skill
 	 * @param targetDate Target date to reach max level
 	 * @param interval   The interval (day, week, month)
+	 * @param maxSkillMode Mode setting for max target (99 or 200m)
 	 * @return XP required per interval
 	 */
 	public static int getRequiredXpPerInterval(int startXp, LocalDate targetDate, TrackingInterval interval, MaxSkillMode maxSkillMode)
@@ -178,93 +147,6 @@ public class XpCalculator
 			return 0;
 		}
 		return startXp;
-	}
-
-	/**
-	 * Clear target tracking data for a skill or all skills
-	 *
-	 * @param skill The skill to clear, or null to clear all skills
-	 */
-	public static void clearTargetTracking(Skill skill)
-	{
-		if (skill == null)
-		{
-			targetStartXp.clear();
-			intervalStartDates.clear();
-			lastTargetDate = null;
-		}
-		else
-		{
-			targetStartXp.remove(skill);
-			intervalStartDates.remove(skill);
-		}
-	}
-
-	/**
-	 * Check if a skill is currently being tracked
-	 *
-	 * @param skill The skill to check
-	 * @return true if the skill is being tracked, false otherwise
-	 */
-	public static boolean isSkillTracked(Skill skill)
-	{
-		return targetStartXp.containsKey(skill);
-	}
-
-	/**
-	 * Check if a skill has met its target XP goal
-	 *
-	 * @param skill     The skill to check
-	 * @param currentXp The current XP for the skill
-	 * @return true if the skill has reached the max XP or its target, false otherwise
-	 */
-	public static boolean isSkillTargetMet(Skill skill, int currentXp, LocalDate targetDate, TrackingInterval interval, MaxSkillMode maxSkillMode)
-	{
-		// Check if the skill has reached MAX_XP for level 99
-		if (currentXp >= LEVEL_99_XP)
-		{
-			return true;
-		}
-
-		// If the skill is not being tracked, it can't have met its target
-		if (!isSkillTracked(skill))
-		{
-			return false;
-		}
-
-		// If we're tracking this skill, check if the player has gained the required XP for this period
-		int targetStartXp = getTargetStartXp(skill);
-		int xpGained = getTargetXpGained(skill, currentXp);
-
-		// If the target date is in the past, we consider the target met
-		if (lastTargetDate != null && LocalDate.now().isAfter(lastTargetDate))
-		{
-			return true;
-		}
-
-		// The target is met if we've reached the daily/weekly/monthly XP goal
-		// Note: This is a simplification. Ideally, we'd check if the player has met
-		// their goal for the current interval (day/week/month).
-		return xpGained >= getRequiredXpPerInterval(targetStartXp, targetDate, interval, maxSkillMode);
-	}
-
-	/**
-	 * Overloaded method for backward compatibility
-	 *
-	 * @param skill The skill to check
-	 * @return true if the skill has reached the max XP, false otherwise
-	 */
-	public static boolean isSkillTargetMet(Skill skill)
-	{
-		// If the skill is not being tracked, it can't have met its target
-		if (!isSkillTracked(skill))
-		{
-			return false;
-		}
-
-		// Without access to current XP, we can only check if the starting XP was already at max
-		int startXp = getTargetStartXp(skill);
-		return startXp >= LEVEL_99_XP;
 	}
 
 	/**

@@ -19,7 +19,7 @@ class XpState
 	private final Map<Skill, XpStateSingle> xpSkills = new EnumMap<>(Skill.class);
 	// this is keeping a copy of the panel skill order so that serialization keeps the order
 	private final List<Skill> order = new ArrayList<>(Skill.values().length);
-	private XpStateSingle overall = new XpStateSingle(-1);
+	private XpStateSingle overall = new XpStateSingle(-1, -1);
 
 	@Inject
 	private TimeToMaxConfig config;
@@ -31,7 +31,7 @@ class XpState
 	{
 		xpSkills.clear();
 		order.clear();
-		overall = new XpStateSingle(-1);
+		overall = new XpStateSingle(-1, -1);
 	}
 
 	/**
@@ -47,11 +47,6 @@ class XpState
 	void resetOverallPerHour()
 	{
 		overall.resetPerHour();
-	}
-
-	void addSkillOrder(Skill skill)
-	{
-		order.add(skill);
 	}
 
 	/**
@@ -94,7 +89,7 @@ class XpState
 					return XpUpdateResult.NO_CHANGE;
 				}
 
-				state.updateGoals(currentXp, goalStartXp, goalEndXp);
+				state.updateGoals(goalStartXp, goalEndXp);
 				updateOrder(skill);
 				return XpUpdateResult.UPDATED;
 			}
@@ -151,11 +146,12 @@ class XpState
 	 */
 	void initializeSkill(Skill skill, long currentXp)
 	{
-		var targetGoalXp = XpCalculator.getRequiredXpPerInterval((int) currentXp, LocalDate.parse(config.targetDate()),
+		int targetGoalXp = (int) currentXp + XpCalculator.getRequiredXpPerInterval((int) currentXp, LocalDate.parse(config.targetDate()),
 			config.trackingInterval(), config.maxSkillMode());
-		XpStateSingle state = new XpStateSingle(currentXp);
+		XpStateSingle state = new XpStateSingle(currentXp, targetGoalXp);
+		var startGoalXp = XpCalculator.getTargetStartXp(skill);
 
-		state.updateGoals(currentXp, (int) currentXp, (int) (currentXp + targetGoalXp));
+		state.updateGoals(startGoalXp, targetGoalXp);
 		xpSkills.put(skill, state);
 	}
 
@@ -189,7 +185,7 @@ class XpState
 	@NonNull
 	XpStateSingle getSkill(Skill skill)
 	{
-		return xpSkills.computeIfAbsent(skill, (s) -> new XpStateSingle(-1));
+		return xpSkills.computeIfAbsent(skill, (s) -> new XpStateSingle(-1, -1));
 	}
 
 	/**
@@ -282,7 +278,7 @@ class XpState
 		{
 			Skill skill = entry.getKey();
 			XpSaveSingle s = entry.getValue();
-			XpStateSingle state = new XpStateSingle(s.startXp);
+			XpStateSingle state = new XpStateSingle(s.startXp, s.endXp);
 			state.restore(s);
 			xpSkills.put(skill, state);
 			order.add(skill);
