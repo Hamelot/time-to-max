@@ -490,6 +490,11 @@ public class TimeToMaxPlugin extends Plugin
 					long diff = currentXp - skillState.getCurrentXp();
 					skillState.setStartXp(skillState.getStartXp() + diff);
 				}
+
+				XpCalculator.recordIntervalStartDate(
+					skill,
+					LocalDate.parse(timeToMaxConfig.targetDate()),
+					timeToMaxConfig.trackingInterval());
 			}
 
 			// Initialize the tracker with the initial xp if not already initialized
@@ -705,8 +710,10 @@ public class TimeToMaxPlugin extends Plugin
 		{
 			log.info("Interval change detected for {} interval - triggering reset", interval);
 			handleTTMReset();
-			String message = String.format("New %s has been detected.", interval);
-			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", message, null);
+			String message = String.format("Time to Max: New %s has been detected. Resetting xp tracker", interval);
+			clientThread.invoke(() ->{
+				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", message, null);
+			});
 		}
 	}
 

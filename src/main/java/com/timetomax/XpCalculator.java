@@ -19,6 +19,7 @@ public class XpCalculator
 	// Store starting XP for each skill for target tracking
 	private static final Map<Skill, Integer> targetStartXp = new HashMap<>();
 	private static final Map<Skill, LocalDate> intervalStartDates = new HashMap<>();
+	private static LocalDate lastTargetDate = null;
 
 	/**
 	 * Check if a new period should start for a skill based on the interval
@@ -50,20 +51,29 @@ public class XpCalculator
 	}
 
 	/**
-	 * Get the XP gained since target tracking started for this period
+	 * Records the starting XP for target tracking and updates period tracking
 	 *
-	 * @param skill     The skill to check
-	 * @param currentXp The current XP in the skill
-	 * @return XP gained since period start, or 0 if not started
+	 * @param skill      The skill to record
+	 * @param targetDate The target date (to detect changes)
+	 * @param interval   The tracking interval
 	 */
-	public static int getTargetXpGained(Skill skill, int currentXp)
+	public static void recordIntervalStartDate(Skill skill, LocalDate targetDate, TrackingInterval interval)
 	{
-		Integer startXp = targetStartXp.get(skill);
-		if (startXp == null)
+		// Reset tracking if target date changes
+		if (lastTargetDate == null || !lastTargetDate.equals(targetDate))
 		{
-			return 0;
+			intervalStartDates.clear();
+			lastTargetDate = targetDate;
 		}
-		return Math.max(0, currentXp - startXp);
+
+		if (!intervalStartDates.containsKey(skill))
+		{
+			intervalStartDates.put(skill, LocalDate.now());
+		}
+		else if (shouldStartNewPeriod(skill, interval))
+		{
+			intervalStartDates.put(skill, LocalDate.now());
+		}
 	}
 
 	/**
