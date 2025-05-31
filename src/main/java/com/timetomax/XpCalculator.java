@@ -18,9 +18,7 @@ public class XpCalculator
 
 	// Store starting XP for each skill for target tracking
 	private static final Map<Skill, Integer> targetStartXp = new HashMap<>();
-	private static final Map<Skill, Integer> targetEndXp = new HashMap<>();
 	private static final Map<Skill, LocalDate> intervalStartDates = new HashMap<>();
-	private static LocalDate lastTargetDate = null;
 
 	/**
 	 * Check if a new period should start for a skill based on the interval
