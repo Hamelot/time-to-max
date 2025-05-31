@@ -89,6 +89,10 @@ A RuneLite plugin that helps you track your progress towards maxing all skills i
 - Add your most important skills to the canvas overlay for constant monitoring
 - Adjust your target date if your play schedule changes
 
+## Donating
+
+If you find this plugin worth a dollar or two and want to [buy me a coffee](https://buymeacoffee.com/hamelot), I would be most grateful!
+
 ## License
 
 This project is licensed under the BSD 2-Clause License - see the LICENSE file for details.
