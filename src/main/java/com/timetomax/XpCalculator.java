@@ -17,7 +17,6 @@ public class XpCalculator
 	public static final int MAX_XP = 200_000_000;
 
 	// Store starting XP for each skill for target tracking
-	private static final Map<Skill, Integer> targetStartXp = new HashMap<>();
 	private static final Map<Skill, LocalDate> intervalStartDates = new HashMap<>();
 	private static LocalDate lastTargetDate = null;
 
@@ -80,19 +79,19 @@ public class XpCalculator
 	 * Get the required XP per day to reach max level by the target date
 	 *
 	 * @param startXp    Start XP in the skill
-	 * @param targetDate Target date to reach max level
+	 * @param config     Instance of the TimeToMaxConfig
 	 * @return XP required per day
 	 */
-	public static int getRequiredXpPerDay(int startXp, LocalDate targetDate, MaxSkillMode maxSkillMode)
+	public static int getRequiredXpPerDay(int startXp, TimeToMaxConfig config)
 	{
-		long daysUntilTarget = ChronoUnit.DAYS.between(LocalDate.now(), targetDate);
+		long daysUntilTarget = ChronoUnit.DAYS.between(LocalDate.now(), LocalDate.parse(config.targetDate()));
 		if (daysUntilTarget <= 0)
 		{
-			if (maxSkillMode == MaxSkillMode.NORMAL)
+			if (config.maxSkillMode() == MaxSkillMode.NORMAL)
 			{
 				return LEVEL_99_XP - startXp; // Target date is today or in the past
 			}
-			else if (maxSkillMode == MaxSkillMode.COMPLETIONIST)
+			else if (config.maxSkillMode() == MaxSkillMode.COMPLETIONIST)
 			{
 				return MAX_XP - startXp;
 			}
@@ -100,7 +99,7 @@ public class XpCalculator
 
 		int xpRemaining = 0;
 
-		if (maxSkillMode == MaxSkillMode.NORMAL)
+		if (config.maxSkillMode() == MaxSkillMode.NORMAL)
 		{
 			xpRemaining = LEVEL_99_XP - startXp;
 			if (xpRemaining <= 0)
@@ -108,7 +107,7 @@ public class XpCalculator
 				return 0;
 			}
 		}
-		else if (maxSkillMode == MaxSkillMode.COMPLETIONIST)
+		else if (config.maxSkillMode() == MaxSkillMode.COMPLETIONIST)
 		{
 			xpRemaining = MAX_XP - startXp;
 			if (xpRemaining <= 0)
@@ -125,16 +124,14 @@ public class XpCalculator
 	 * Get the required XP per interval to reach max level by the target date
 	 *
 	 * @param startXp    Start XP in the skill
-	 * @param targetDate Target date to reach max level
-	 * @param interval   The interval (day, week, month)
-	 * @param maxSkillMode Mode setting for max target (99 or 200m)
+	 * @param config instance of TimeToMaxConfig
 	 * @return XP required per interval
 	 */
-	public static int getRequiredXpPerInterval(int startXp, LocalDate targetDate, TrackingInterval interval, MaxSkillMode maxSkillMode)
+	public static int getRequiredXpPerInterval(int startXp, TimeToMaxConfig config)
 	{
-		int xpPerDay = getRequiredXpPerDay(startXp, targetDate, maxSkillMode);
+		int xpPerDay = getRequiredXpPerDay(startXp, config);
 
-		switch (interval)
+		switch (config.trackingInterval())
 		{
 			case WEEK:
 				return xpPerDay * 7;
@@ -143,20 +140,6 @@ public class XpCalculator
 			default:
 				return xpPerDay;
 		}
-	}
-
-	/**
-	 * @param skill The skill to check
-	 * @return XP tracked from the start for a skill, or zero if no start xp found
-	 */
-	public static int getTargetStartXp(Skill skill)
-	{
-		Integer startXp = targetStartXp.get(skill);
-		if (startXp == null)
-		{
-			return 0;
-		}
-		return startXp;
 	}
 
 	/**
