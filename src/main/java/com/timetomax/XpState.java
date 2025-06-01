@@ -146,13 +146,7 @@ class XpState
 	 */
 	void initializeSkill(Skill skill, long currentXp)
 	{
-		int targetGoalXp = (int) currentXp + XpCalculator.getRequiredXpPerInterval((int) currentXp, LocalDate.parse(config.targetDate()),
-			config.trackingInterval(), config.maxSkillMode());
-		XpStateSingle state = new XpStateSingle(currentXp, targetGoalXp);
-		var startGoalXp = XpCalculator.getTargetStartXp(skill);
-
-		state.updateGoals(startGoalXp, targetGoalXp);
-		xpSkills.put(skill, state);
+		xpSkills.put(skill, new XpStateSingle(currentXp));
 	}
 
 	void initializeOverall(long currentXp)

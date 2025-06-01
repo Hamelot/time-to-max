@@ -107,7 +107,9 @@ class XpStateSingle
 	{
 		// Always use endLevelExp which is the current goal (either user defined or next level)
 		// endLevelExp is properly set in updateGoals based on the user's configured goal
-		return Math.max(0, endLevelExp - (int) getCurrentXp());
+		int xpGained = getTotalXpGained();
+		int xpGoal = endLevelExp - startLevelExp;
+		return Math.max(0, xpGoal - xpGained);
 	}
 
 	private int getActionsRemaining()
@@ -138,7 +140,7 @@ class XpStateSingle
 
 	private double getSkillProgress()
 	{
-		double xpGained = getCurrentXp() - startLevelExp;
+		double xpGained = getTotalXpGained();
 		double xpGoal = endLevelExp - startLevelExp;
 		return (xpGained / xpGoal) * 100;
 	}
@@ -269,10 +271,11 @@ class XpStateSingle
 	void updateGoals(int goalStartXp, int goalEndXp)
 	{
 		// Since we're calculating start and end goal, we just set the values directly
-		// Default to -1 if the goal is not set
+		// Default to 0 if the goal is not set
 		startLevelExp = Math.max(goalStartXp, 0);
 
 		endLevelExp = Math.max(goalEndXp, 0);
+		endXp = endLevelExp;
 	}
 
 	public void tick(long delta)

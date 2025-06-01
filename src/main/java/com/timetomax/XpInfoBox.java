@@ -33,9 +33,6 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
-import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
-import java.util.Collections;
 import javax.swing.ImageIcon;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -77,7 +74,7 @@ class XpInfoBox extends JPanel
 	private static final String PROGRESS_BAR_TOOLTIP_NO_ACTIONS =
 		"<html>%s %s%s</html>";
 	private static final String HTML_LABEL_TEMPLATE =
-		"<html><body style='color:%s'>%s<span style='color:white'>%s</span></body></html>";
+		"<html><body style='color:%s; max-height:16px; white-space: nowrap; overflow: hidden;'>%s<span style='color:white;'>%s</span></body></html>";
 
 	private static final String REMOVE_STATE = "Remove from canvas";
 	private static final String ADD_STATE = "Add to canvas";
@@ -116,13 +113,13 @@ class XpInfoBox extends JPanel
 	private final JMenuItem pauseSkill = new JMenuItem("Pause");
 	private final JMenuItem canvasItem = new JMenuItem(ADD_STATE);
 
-	private final TimeToMaxConfig timeToMaxConfig;
+	private final TimeToMaxConfig config;
 
 	private boolean paused = false;
 
-	XpInfoBox(TimeToMaxPlugin timeToMaxPlugin, TimeToMaxConfig timeToMaxConfig, JComponent panel, Skill skill, SkillIconManager iconManager)
+	XpInfoBox(TimeToMaxPlugin timeToMaxPlugin, TimeToMaxConfig config, JComponent panel, Skill skill, SkillIconManager iconManager)
 	{
-		this.timeToMaxConfig = timeToMaxConfig;
+		this.config = config;
 		this.panel = panel;
 		this.skill = skill;
 
@@ -296,13 +293,13 @@ class XpInfoBox extends JPanel
 			}
 
 			// Handle prioritized skills (move to top)
-			if (timeToMaxConfig.prioritizeRecentXpSkills())
+			if (config.prioritizeRecentXpSkills())
 			{
 				panel.setComponentZOrder(this, 0);
 			}
 
 			// Handle completed skills (move to bottom)
-			if (timeToMaxConfig.pinCompletedSkillsToBottom())
+			if (config.pinCompletedSkillsToBottom())
 			{
 				int goalStartXp = xpSnapshotSingle.getStartGoalXp();
 				int xpGained = xpSnapshotSingle.getXpGainedInSession();
@@ -311,13 +308,9 @@ class XpInfoBox extends JPanel
 				// If we have goal information and enough XP to determine completion
 				try
 				{
-					LocalDate targetDate = LocalDate.parse(timeToMaxConfig.targetDate());
-					TrackingInterval interval = timeToMaxConfig.trackingInterval();
-					MaxSkillMode maxSkillMode = timeToMaxConfig.maxSkillMode();
-
 					// If skill target is met, move to bottom of panel
 					var startGoalXp = xpSnapshotSingle.getStartGoalXp();
-					if (Math.max(0, currentXp - startGoalXp) >= XpCalculator.getRequiredXpPerInterval(startGoalXp, targetDate, interval, maxSkillMode))
+					if (Math.max(0, currentXp - startGoalXp) >= XpCalculator.getRequiredXpPerInterval(startGoalXp, config))
 					{
 						panel.setComponentZOrder(this, panel.getComponentCount() - 1);
 						panel.revalidate();
@@ -331,56 +324,41 @@ class XpInfoBox extends JPanel
 
 			paused = skillPaused;
 
-			// Get settings and XP values
-			TrackingInterval interval = timeToMaxConfig.trackingInterval();
-			MaxSkillMode maxSkillMode = timeToMaxConfig.maxSkillMode();
-			LocalDate targetDate;
-			try
-			{
-				targetDate = LocalDate.parse(timeToMaxConfig.targetDate());
-			}
-			catch (DateTimeParseException e)
-			{
-				targetDate = LocalDate.now().plusYears(1);
-			}
-
 			// Always use consistent XP values from the snapshot
 			int goalStartXp = xpSnapshotSingle.getStartGoalXp();
-			int goalEndXp = xpSnapshotSingle.getEndGoalXp();
 			int xpGained = xpSnapshotSingle.getXpGainedInSession();
-			int requiredXp = XpCalculator.getRequiredXpPerInterval(goalStartXp, targetDate, interval, maxSkillMode);
-			int progressPercent = xpGained > 0 ? Math.min(100, Math.abs((int) ((double) xpGained / requiredXp * 100))) : 0;
+			int requiredXpForInterval = XpCalculator.getRequiredXpPerInterval(goalStartXp, config);
 
 			// Update progress bar
-			progressBar.setValue(progressPercent);
+			progressBar.setValue((int) xpSnapshotSingle.getSkillProgressToGoal());
+			progressBar.setCenterLabel(config.progressBarLabel().getValueFunc().apply(xpSnapshotSingle));
 			progressBar.setLeftLabel("");
-			progressBar.setRightLabel(QuantityFormatter.quantityToRSDecimalStack(requiredXp, true));
-			progressBar.setPositions(Collections.emptyList());
+			progressBar.setRightLabel(QuantityFormatter.quantityToRSDecimalStack(requiredXpForInterval, true));
 
 			// Set center label based on completion status
-			if (progressPercent == 100)
+			if ((int) xpSnapshotSingle.getSkillProgressToGoal() == 100)
 			{
 				progressBar.setCenterLabel("Complete");
 				// collapse progress bar if completed
-				if (timeToMaxConfig.collapseCompletedSkills())
+				if (config.collapseCompletedSkills())
 				{
 					setCompactView(true);
 				}
 			}
 			else
 			{
-				String progress = String.format("%d%%", progressPercent);
 				setCompactView(false);
-				progressBar.setCenterLabel(progress);
+				progressBar.setValue((int) xpSnapshotSingle.getSkillProgressToGoal());
+				progressBar.setCenterLabel(config.progressBarLabel().getValueFunc().apply(xpSnapshotSingle));
 			}
 
 			// Prepare tooltip text
-			XpProgressBarLabel tooltipLabel = timeToMaxConfig.progressBarTooltipLabel();
+			XpProgressBarLabel tooltipLabel = config.progressBarTooltipLabel();
 			String targetProgressText = String.format(
 				"<br/>%s/%s target XP for %s",
 				QuantityFormatter.quantityToRSDecimalStack(xpGained, true),
-				QuantityFormatter.quantityToRSDecimalStack(requiredXp, true),
-				interval.toString().toLowerCase());
+				QuantityFormatter.quantityToRSDecimalStack(requiredXpForInterval, true),
+				config.trackingInterval().toString().toLowerCase());
 
 			// Set tooltip based on skill type
 			if (isCombatSkill(skill))
@@ -403,12 +381,6 @@ class XpInfoBox extends JPanel
 			}
 
 			progressBar.setDimmed(skillPaused);
-
-			// Update XP panel labels
-			topLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel1(), xpSnapshotSingle));
-			topRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel2(), xpSnapshotSingle));
-			bottomLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel3(), xpSnapshotSingle));
-			bottomRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel4(), xpSnapshotSingle));
 		}
 		// Handle paused state changes
 		else if (!paused && skillPaused)
@@ -426,10 +398,10 @@ class XpInfoBox extends JPanel
 
 		// Update information labels
 		// Update exp per hour separately, every time (not only when there's an update)
-		topLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel1(), xpSnapshotSingle));
-		topRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel2(), xpSnapshotSingle));
-		bottomLeftStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel3(), xpSnapshotSingle));
-		bottomRightStat.setText(htmlLabel(timeToMaxConfig.xpPanelLabel4(), xpSnapshotSingle));
+		topLeftStat.setText(htmlLabel(config.xpPanelLabel1(), xpSnapshotSingle));
+		topRightStat.setText(htmlLabel(config.xpPanelLabel2(), xpSnapshotSingle));
+		bottomLeftStat.setText(htmlLabel(config.xpPanelLabel3(), xpSnapshotSingle));
+		bottomRightStat.setText(htmlLabel(config.xpPanelLabel4(), xpSnapshotSingle));
 	}
 
 	private String htmlLabel(XpPanelLabel panelLabel, XpSnapshotSingle xpSnapshotSingle)
