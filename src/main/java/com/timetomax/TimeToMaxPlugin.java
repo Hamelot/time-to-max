@@ -654,6 +654,8 @@ public class TimeToMaxPlugin extends Plugin
 		}
 
 		rebuildSkills();
+
+		xpPanel.updateTargetPanel(config);
 	}
 
 	@Schedule(

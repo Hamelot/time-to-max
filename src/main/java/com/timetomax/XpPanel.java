@@ -27,8 +27,12 @@ package com.timetomax;
 
 import java.awt.BorderLayout;
 import java.awt.GridLayout;
+import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
 import javax.swing.BoxLayout;
@@ -220,71 +224,87 @@ class XpPanel extends PluginPanel
 			String intervalUnit;
 			String currentIntervalLabel;
 
-			java.time.LocalDateTime currentTime = java.time.LocalDateTime.now();
+			LocalDateTime currentTime = LocalDateTime.now();
+			LocalDateTime nextIntervalEnd;
 
 			switch (interval)
 			{
 				case DAY:
 					intervalUnit = "Day";
 					currentIntervalLabel = "day";
-
-					// Calculate total days remaining to the target date
-					intervalsRemaining = java.time.temporal.ChronoUnit.DAYS.between(now, targetDate);
-
-					// Calculate hours remaining in the current day
-					java.time.LocalDateTime endOfDay = currentTime.toLocalDate().atTime(23, 59, 59);
-					long hoursRemaining = java.time.temporal.ChronoUnit.HOURS.between(currentTime, endOfDay);
-					timeLeftInCurrentInterval = (hoursRemaining + 1) + " hour" + (hoursRemaining + 1 != 1 ? "s" : "");
+					intervalsRemaining = ChronoUnit.DAYS.between(now, targetDate);
+					nextIntervalEnd = currentTime.toLocalDate().atTime(23, 59, 59);
 					break;
 				case WEEK:
 					intervalUnit = "Week";
 					currentIntervalLabel = "week";
-
-					// Calculate total weeks remaining to the target date
-					intervalsRemaining = java.time.temporal.ChronoUnit.WEEKS.between(now, targetDate);
-
-					// Calculate days remaining in the current week (assuming week ends on Sunday)
-					java.time.DayOfWeek currentDay = currentTime.getDayOfWeek();
-					int daysUntilEndOfWeek = java.time.DayOfWeek.SUNDAY.getValue() - currentDay.getValue();
-					if (daysUntilEndOfWeek < 0)
-					{
-						daysUntilEndOfWeek += 7; // If today is Sunday, there are 0 days left
-					}
-					timeLeftInCurrentInterval = daysUntilEndOfWeek + " day" + (daysUntilEndOfWeek != 1 ? "s" : "");
+					intervalsRemaining = ChronoUnit.WEEKS.between(now, targetDate);
+					// End of week (Sunday 23:59:59)
+					int daysUntilEndOfWeek = DayOfWeek.SUNDAY.getValue() - currentTime.getDayOfWeek().getValue();
+					if (daysUntilEndOfWeek < 0) daysUntilEndOfWeek += 7;
+					nextIntervalEnd = currentTime.toLocalDate().plusDays(daysUntilEndOfWeek).atTime(23, 59, 59);
 					break;
 				case MONTH:
 					intervalUnit = "Month";
 					currentIntervalLabel = "month";
-
-					// Calculate total months remaining to the target date
-					intervalsRemaining = java.time.temporal.ChronoUnit.MONTHS.between(now.withDayOfMonth(1), targetDate.withDayOfMonth(1));
-
-					// Calculate days remaining in the current month
-					java.time.LocalDate lastDayOfMonth = currentTime.toLocalDate()
-						.withDayOfMonth(currentTime.toLocalDate().lengthOfMonth());
-					long daysRemaining = java.time.temporal.ChronoUnit.DAYS.between(
-						currentTime.toLocalDate(), lastDayOfMonth) + 1; // +1 to include today
-					timeLeftInCurrentInterval = daysRemaining + " day" + (daysRemaining != 1 ? "s" : "");
+					intervalsRemaining = ChronoUnit.MONTHS.between(now.withDayOfMonth(1), targetDate.withDayOfMonth(1));
+					LocalDate lastDayOfMonth = currentTime.toLocalDate().withDayOfMonth(currentTime.toLocalDate().lengthOfMonth());
+					nextIntervalEnd = lastDayOfMonth.atTime(23, 59, 59);
 					break;
 				default:
 					intervalUnit = "Interval";
 					currentIntervalLabel = "interval";
-					intervalsRemaining = Math.max(0, java.time.temporal.ChronoUnit.DAYS.between(now, targetDate));
-					timeLeftInCurrentInterval = "Unknown";
+					intervalsRemaining = Math.max(0, ChronoUnit.DAYS.between(now, targetDate));
+					nextIntervalEnd = currentTime.plusDays(1).withHour(23).withMinute(59).withSecond(59);
 			}
+
+			Duration duration = Duration.between(currentTime, nextIntervalEnd);
+			long totalSeconds = duration.getSeconds();
+			if (totalSeconds < 0) totalSeconds = 0;
+
+			long months = 0;
+			long days = 0;
+			long hours = 0;
+			long minutes = 0;
+
+			// Calculate months and days if needed
+			java.time.LocalDateTime temp = currentTime;
+			if (totalSeconds > 30L * 24 * 3600) {
+				// More than 30 days
+				months = ChronoUnit.MONTHS.between(temp.toLocalDate(), nextIntervalEnd.toLocalDate());
+				temp = temp.plusMonths(months);
+			}
+			if (totalSeconds > 24 * 3600) {
+				days = ChronoUnit.DAYS.between(temp.toLocalDate(), nextIntervalEnd.toLocalDate());
+				temp = temp.plusDays(days);
+			}
+			Duration remainder = Duration.between(temp, nextIntervalEnd);
+			hours = remainder.toHours();
+			minutes = remainder.toMinutes() % 60;
+
+			StringBuilder sb = new StringBuilder();
+			if (totalSeconds > 30L * 24 * 3600) {
+				if (months > 0) sb.append(months).append(" month").append(months != 1 ? "s " : " ");
+				if (days > 0) sb.append(days).append(" day").append(days != 1 ? "s " : " ");
+				sb.append(String.format("%02d:%02d", hours, minutes));
+			} else if (totalSeconds > 24 * 3600) {
+				if (days > 0) sb.append(days).append(" day").append(days != 1 ? "s " : " ");
+				sb.append(String.format("%02d:%02d", hours, minutes));
+			} else {
+				sb.append(String.format("%02d:%02d", hours, minutes));
+			}
+			timeLeftInCurrentInterval = sb.toString().trim();
 
 			targetDateLabel.setText(XpInfoBox.htmlLabel("Target Date: ", targetDate.toString()));
 			targetIntervalLabel.setText(XpInfoBox.htmlLabel("Tracking: ", "Per " + interval.toString().toLowerCase()));
 
-			// Format the label with plural handling
-			String intervalsRemainingText = intervalUnit + "s remaining to goal: " + intervalsRemaining;
-			String timeLeftText = "Time left in current " + currentIntervalLabel + ": " + timeLeftInCurrentInterval;
+			String intervalsRemainingText = intervalUnit + "s remaining to goal: ";
+			String timeLeftText = "Time left in current " + currentIntervalLabel + ": ";
 
-			intervalsRemainingLabel.setText(XpInfoBox.htmlLabel(intervalsRemainingText, ""));
-			JLabel timeLeftLabel = new JLabel(XpInfoBox.htmlLabel(timeLeftText, ""));
+			intervalsRemainingLabel.setText(XpInfoBox.htmlLabel(intervalsRemainingText, String.valueOf(intervalsRemaining)));
+			JLabel timeLeftLabel = new JLabel(XpInfoBox.htmlLabel(timeLeftText, timeLeftInCurrentInterval));
 			timeLeftLabel.setFont(FontManager.getRunescapeSmallFont());
 
-			// Update the target panel
 			targetPanel.removeAll();
 			targetPanel.add(targetDateLabel);
 			targetPanel.add(targetIntervalLabel);
