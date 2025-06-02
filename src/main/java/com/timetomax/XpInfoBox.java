@@ -336,7 +336,7 @@ class XpInfoBox extends JPanel
 			progressBar.setRightLabel(QuantityFormatter.quantityToRSDecimalStack(requiredXpForInterval, true));
 
 			// Set center label based on completion status
-			if ((int) xpSnapshotSingle.getSkillProgressToGoal() == 100)
+			if ((int) xpSnapshotSingle.getSkillProgressToGoal() >= 100)
 			{
 				progressBar.setCenterLabel("Complete");
 				// collapse progress bar if completed
