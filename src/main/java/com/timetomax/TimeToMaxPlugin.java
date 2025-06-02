@@ -31,7 +31,6 @@ import com.google.inject.Binder;
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
 import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.EnumSet;
 import javax.inject.Inject;
@@ -612,6 +611,14 @@ public class TimeToMaxPlugin extends Plugin
 		return xpState.getSkillSnapshot(skill);
 	}
 
+	/**
+	 * Get the injected ConfigManager for other components to use
+	 * @return the ConfigManager instance
+	 */
+	public ConfigManager getInjectedConfigManager()
+	{
+		return configManager;
+	}
 
 	@Schedule(
 		period = 1,
