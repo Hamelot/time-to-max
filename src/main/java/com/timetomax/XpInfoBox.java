@@ -33,6 +33,8 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import javax.swing.ImageIcon;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -53,7 +55,8 @@ import net.runelite.client.ui.DynamicGridLayout;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.SkillColor;
 import net.runelite.client.ui.components.MouseDragEventForwarder;
-import net.runelite.client.ui.components.ProgressBar;
+// Custom progress bar with daily on-track indicator
+import com.timetomax.OnTrackProgressBar;
 import net.runelite.client.util.ColorUtil;
 import net.runelite.client.util.QuantityFormatter;
 
@@ -103,7 +106,7 @@ class XpInfoBox extends JPanel
 	// Contains skill icon
 	private final JLabel compactSkillIcon;
 
-	private final ProgressBar progressBar = new ProgressBar();
+        private final OnTrackProgressBar progressBar = new OnTrackProgressBar();
 
 	private final JLabel topLeftStat = new JLabel();
 	private final JLabel bottomLeftStat = new JLabel();
@@ -282,7 +285,7 @@ class XpInfoBox extends JPanel
 		return skillIcon;
 	}
 
-	private void rebuildAsync(boolean updated, boolean skillPaused, XpSnapshotSingle xpSnapshotSingle)
+        private void rebuildAsync(boolean updated, boolean skillPaused, XpSnapshotSingle xpSnapshotSingle)
 	{
 		if (updated)
 		{
@@ -329,11 +332,13 @@ class XpInfoBox extends JPanel
 			int xpGained = xpSnapshotSingle.getXpGainedInSession();
 			int requiredXpForInterval = XpCalculator.getRequiredXpPerInterval(goalStartXp, config);
 
-			// Update progress bar
-			progressBar.setValue((int) xpSnapshotSingle.getSkillProgressToGoal());
-			progressBar.setCenterLabel(config.progressBarLabel().getValueFunc().apply(xpSnapshotSingle));
-			progressBar.setLeftLabel("");
-			progressBar.setRightLabel(QuantityFormatter.quantityToRSDecimalStack(requiredXpForInterval, true));
+                        // Update progress bar
+                        progressBar.setValue((int) xpSnapshotSingle.getSkillProgressToGoal());
+                        progressBar.setCenterLabel(config.progressBarLabel().getValueFunc().apply(xpSnapshotSingle));
+                        progressBar.setLeftLabel("");
+                        progressBar.setRightLabel(QuantityFormatter.quantityToRSDecimalStack(requiredXpForInterval, true));
+
+                        updateOnTrackMarker(xpSnapshotSingle);
 
 			// Set center label based on completion status
 			if ((int) xpSnapshotSingle.getSkillProgressToGoal() >= 100)
@@ -401,8 +406,38 @@ class XpInfoBox extends JPanel
 		topLeftStat.setText(htmlLabel(config.xpPanelLabel1(), xpSnapshotSingle));
 		topRightStat.setText(htmlLabel(config.xpPanelLabel2(), xpSnapshotSingle));
 		bottomLeftStat.setText(htmlLabel(config.xpPanelLabel3(), xpSnapshotSingle));
-		bottomRightStat.setText(htmlLabel(config.xpPanelLabel4(), xpSnapshotSingle));
-	}
+                bottomRightStat.setText(htmlLabel(config.xpPanelLabel4(), xpSnapshotSingle));
+        }
+
+        private void updateOnTrackMarker(XpSnapshotSingle snapshot)
+        {
+                if (config.trackingInterval() == TrackingInterval.DAY)
+                {
+                        progressBar.setOnTrackPercent(-1);
+                        return;
+                }
+
+                LocalDate startDate = XpCalculator.getIntervalStartDate(skill);
+                if (startDate == null)
+                {
+                        progressBar.setOnTrackPercent(-1);
+                        return;
+                }
+
+                long daysElapsed = ChronoUnit.DAYS.between(startDate, LocalDate.now()) + 1;
+                int daysInInterval = config.trackingInterval() == TrackingInterval.WEEK ? 7 : 30;
+                daysElapsed = Math.min(daysElapsed, daysInInterval);
+
+                int goalStartXp = snapshot.getStartGoalXp();
+                int xpPerDay = XpCalculator.getRequiredXpPerDay(goalStartXp, config);
+                int intervalXp = XpCalculator.getRequiredXpPerInterval(goalStartXp, config);
+                int xpTargetSoFar = xpPerDay * (int) daysElapsed;
+
+                double percent = intervalXp == 0 ? -1 : (double) xpTargetSoFar * 100.0 / intervalXp;
+                percent = Math.min(Math.max(percent, 0), 100);
+
+                progressBar.setOnTrackPercent(percent);
+        }
 
 	private String htmlLabel(XpPanelLabel panelLabel, XpSnapshotSingle xpSnapshotSingle)
 	{
