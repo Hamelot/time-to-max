@@ -24,6 +24,7 @@
  */
 package com.timetomax;
 
+import java.time.LocalDate;
 import lombok.Builder;
 import lombok.Value;
 
@@ -33,6 +34,7 @@ class XpSnapshotSingle
 {
 	private int startLevel;
 	private int endLevel;
+	private LocalDate startDate;
 	private int startGoalXp;
 	private int endGoalXp;
 	private int xpGainedInSession;

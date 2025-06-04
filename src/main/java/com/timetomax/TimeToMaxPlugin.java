@@ -475,11 +475,6 @@ public class TimeToMaxPlugin extends Plugin
 					long diff = currentXp - skillState.getCurrentXp();
 					skillState.setStartXp(skillState.getStartXp() + diff);
 				}
-
-				XpCalculator.recordIntervalStartDate(
-					skill,
-					LocalDate.parse(config.targetDate()),
-					config.trackingInterval());
 			}
 
 			// Initialize the tracker with the initial xp if not already initialized
@@ -627,11 +622,16 @@ public class TimeToMaxPlugin extends Plugin
 	public void tickSkillTimes()
 	{
 		int pauseSkillAfter = config.pauseSkillAfter();
+		LocalDate earliestPeriodStart = null;
 		// Adjust unpause states
 		for (Skill skill : Skill.values())
 		{
 			long skillExperience = client.getSkillExperience(skill);
 			xpPauseState.tickXp(skill, skillExperience, pauseSkillAfter);
+			if (earliestPeriodStart == null || xpState.getSkill(skill).getStartDate().isBefore(earliestPeriodStart))
+			{
+				earliestPeriodStart = xpState.getSkill(skill).getStartDate();
+			}
 		}
 		xpPauseState.tickOverall(client.getOverallExperience(), pauseSkillAfter);
 
@@ -658,6 +658,19 @@ public class TimeToMaxPlugin extends Plugin
 		if (!xpPauseState.isOverallPaused())
 		{
 			xpState.tickOverall(tickDelta);
+		}
+
+		// If we have a period start date and we need to start a new period, trigger reset
+		if (earliestPeriodStart != null && 
+			XpCalculator.shouldStartNewPeriod(earliestPeriodStart,
+			config.trackingInterval()))
+		{
+			log.info("Interval change detected for {} interval - triggering reset", config.trackingInterval());
+			handleTTMReset();
+			String message = String.format("Time to Max: New %s has been detected. Resetting xp tracker", config.trackingInterval());
+			clientThread.invoke(() ->{
+				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", message, null);
+			});
 		}
 
 		rebuildSkills();
@@ -698,17 +711,6 @@ public class TimeToMaxPlugin extends Plugin
 			{
 				earliestPeriodStart = skillPeriodStart;
 			}
-		}
-		
-		// If we have a period start date and we need to start a new period, trigger reset
-		if (earliestPeriodStart != null && XpCalculator.shouldStartNewIntervalForDate(interval, earliestPeriodStart))
-		{
-			log.info("Interval change detected for {} interval - triggering reset", interval);
-			handleTTMReset();
-			String message = String.format("Time to Max: New %s has been detected. Resetting xp tracker", interval);
-			clientThread.invoke(() ->{
-				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", message, null);
-			});
 		}
 	}
 

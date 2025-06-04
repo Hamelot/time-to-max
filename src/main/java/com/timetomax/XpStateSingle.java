@@ -27,6 +27,7 @@
 package com.timetomax;
 
 import java.util.Arrays;
+import java.time.LocalDate;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -48,6 +49,10 @@ class XpStateSingle
 	@Getter
 	@Setter
 	private long endXp;
+
+	@Getter
+	@Setter
+	private LocalDate startDate = null;
 
 	@Getter
 	private int xpGainedSinceReset = 0;
@@ -82,6 +87,15 @@ class XpStateSingle
 	int getTotalXpGained()
 	{
 		return xpGainedBeforeReset + xpGainedSinceReset;
+	}
+
+	LocalDate getStartDate()
+	{
+		if (startDate == null)
+		{
+			startDate = LocalDate.now();
+		}
+		return startDate;
 	}
 
 	private int getActionsHr()
@@ -293,6 +307,7 @@ class XpStateSingle
 		return XpSnapshotSingle.builder()
 			.startLevel(Experience.getLevelForXp(startLevelExp))
 			.endLevel(Experience.getLevelForXp(endLevelExp))
+			.startDate(getStartDate())
 			.xpGainedInSession(getTotalXpGained())
 			.xpRemainingToGoal(getXpRemaining())
 			.xpPerHour(getXpHr())
@@ -313,6 +328,7 @@ class XpStateSingle
 		XpSaveSingle save = new XpSaveSingle();
 		save.startXp = startXp;
 		save.endXp = endXp;
+		save.startDate = getStartDate();
 		save.xpGainedBeforeReset = xpGainedBeforeReset;
 		save.xpGainedSinceReset = xpGainedSinceReset;
 		save.time = skillTime;
@@ -323,6 +339,7 @@ class XpStateSingle
 	{
 		startXp = save.startXp;
 		endXp = save.endXp;
+		startDate = save.startDate;
 		xpGainedBeforeReset = save.xpGainedBeforeReset;
 		xpGainedSinceReset = save.xpGainedSinceReset;
 		skillTime = save.time;

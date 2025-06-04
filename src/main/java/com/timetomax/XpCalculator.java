@@ -18,7 +18,6 @@ public class XpCalculator
 
 	// Store starting XP for each skill for target tracking
 	private static final Map<Skill, LocalDate> intervalStartDates = new HashMap<>();
-	private static LocalDate lastTargetDate = null;
 
 	/**
 	 * Check if a new period should start for a skill based on the interval
@@ -27,51 +26,19 @@ public class XpCalculator
 	 * @param interval The current tracking interval
 	 * @return true if a new period should start
 	 */
-	public static boolean shouldStartNewPeriod(Skill skill, TrackingInterval interval)
+	public static boolean shouldStartNewPeriod(LocalDate startDate, TrackingInterval interval)
 	{
-		LocalDate periodStart = intervalStartDates.get(skill);
-		if (periodStart == null)
-		{
-			return true;
-		}
-
 		LocalDate now = LocalDate.now();
 		switch (interval)
 		{
 			case DAY:
-				return !now.equals(periodStart);
+				return !now.equals(startDate);
 			case WEEK:
-				return ChronoUnit.WEEKS.between(periodStart, now) > 0;
+				return ChronoUnit.WEEKS.between(startDate, now) > 0;
 			case MONTH:
-				return ChronoUnit.MONTHS.between(periodStart, now) > 0;
+				return ChronoUnit.MONTHS.between(startDate, now) > 0;
 			default:
 				return true;
-		}
-	}
-
-	/**
-	 * Records the starting XP for target tracking and updates period tracking
-	 *
-	 * @param skill      The skill to record
-	 * @param targetDate The target date (to detect changes)
-	 * @param interval   The tracking interval
-	 */
-	public static void recordIntervalStartDate(Skill skill, LocalDate targetDate, TrackingInterval interval)
-	{
-		// Reset tracking if target date changes
-		if (lastTargetDate == null || !lastTargetDate.equals(targetDate))
-		{
-			intervalStartDates.clear();
-			lastTargetDate = targetDate;
-		}
-
-		if (!intervalStartDates.containsKey(skill))
-		{
-			intervalStartDates.put(skill, LocalDate.now());
-		}
-		else if (shouldStartNewPeriod(skill, interval))
-		{
-			intervalStartDates.put(skill, LocalDate.now());
 		}
 	}
 
