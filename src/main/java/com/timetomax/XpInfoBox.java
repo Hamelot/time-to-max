@@ -70,7 +70,8 @@ class XpInfoBox extends JPanel
 	private static final String PROGRESS_BAR_TOOLTIP =
 		"<html>%s Actions done<br/>"
 			+ "%s Actions/hr<br/>"
-			+ "%s %s%s</html>";
+			+ "%s %s%s<br/>"
+			+ "%s </html>";
 	private static final String PROGRESS_BAR_TOOLTIP_NO_ACTIONS =
 		"<html>%s %s%s</html>";
 	private static final String HTML_LABEL_TEMPLATE =
@@ -359,6 +360,13 @@ class XpInfoBox extends JPanel
 				QuantityFormatter.quantityToRSDecimalStack(xpGained, true),
 				QuantityFormatter.quantityToRSDecimalStack(requiredXpForInterval, true),
 				config.trackingInterval().toString().toLowerCase());
+			String startDateValue = String.format("%04d-%02d-%02d",
+				xpSnapshotSingle.getStartYear(),
+				xpSnapshotSingle.getStartMonth(),
+				xpSnapshotSingle.getStartDay());
+			String startDateText = String.format(
+				"Start date: %s", startDateValue
+			);
 
 			// Set tooltip based on skill type
 			if (isCombatSkill(skill))
@@ -367,7 +375,8 @@ class XpInfoBox extends JPanel
 					PROGRESS_BAR_TOOLTIP_NO_ACTIONS,
 					tooltipLabel.getValueFunc().apply(xpSnapshotSingle),
 					tooltipLabel == XpProgressBarLabel.PERCENTAGE ? "of goal" : "till goal xp",
-					targetProgressText));
+					targetProgressText,
+					startDateText));
 			}
 			else
 			{
@@ -377,7 +386,8 @@ class XpInfoBox extends JPanel
 					xpSnapshotSingle.getActionsPerHour(),
 					tooltipLabel.getValueFunc().apply(xpSnapshotSingle),
 					tooltipLabel == XpProgressBarLabel.PERCENTAGE ? "of goal" : "till goal xp",
-					targetProgressText));
+					targetProgressText,
+					startDateText));
 			}
 
 			progressBar.setDimmed(skillPaused);

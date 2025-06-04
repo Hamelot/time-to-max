@@ -46,6 +46,12 @@ class XpSaveSingle
 	long startXp;
 	@SerializedName("e")
 	long endXp;
+	@SerializedName("sd")
+	int startDay;
+	@SerializedName("sm")
+	int startMonth;
+	@SerializedName("sy")
+	int startYear;
 	@SerializedName("br")
 	int xpGainedBeforeReset;
 	@SerializedName("ar")
