@@ -20,29 +20,6 @@ public class XpCalculator
 	private static final Map<Skill, LocalDate> intervalStartDates = new HashMap<>();
 
 	/**
-	 * Check if a new period should start for a skill based on the interval
-	 *
-	 * @param skill    The skill to check
-	 * @param interval The current tracking interval
-	 * @return true if a new period should start
-	 */
-	public static boolean shouldStartNewPeriod(LocalDate startDate, TrackingInterval interval)
-	{
-		LocalDate now = LocalDate.now();
-		switch (interval)
-		{
-			case DAY:
-				return !now.equals(startDate);
-			case WEEK:
-				return ChronoUnit.WEEKS.between(startDate, now) > 0;
-			case MONTH:
-				return ChronoUnit.MONTHS.between(startDate, now) > 0;
-			default:
-				return true;
-		}
-	}
-
-	/**
 	 * Get the required XP per day to reach max level by the target date
 	 *
 	 * @param startXp    Start XP in the skill

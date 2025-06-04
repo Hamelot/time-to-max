@@ -52,7 +52,15 @@ class XpStateSingle
 
 	@Getter
 	@Setter
-	private LocalDate startDate = null;
+	private int startDay = 31;
+
+	@Getter
+	@Setter
+	private int startMonth = 12;
+
+	@Getter
+	@Setter
+	private int startYear = 9999;
 
 	@Getter
 	private int xpGainedSinceReset = 0;
@@ -87,15 +95,6 @@ class XpStateSingle
 	int getTotalXpGained()
 	{
 		return xpGainedBeforeReset + xpGainedSinceReset;
-	}
-
-	LocalDate getStartDate()
-	{
-		if (startDate == null)
-		{
-			startDate = LocalDate.now();
-		}
-		return startDate;
 	}
 
 	private int getActionsHr()
@@ -292,6 +291,13 @@ class XpStateSingle
 		endXp = endLevelExp;
 	}
 
+	void updateStartDate(int startDay, int startMonth, int startYear)
+	{
+		this.startDay = startDay;
+		this.startMonth = startMonth;
+		this.startYear = startYear;
+	}
+
 	public void tick(long delta)
 	{
 		// Track time as long as we have gained XP since baseline
@@ -302,12 +308,27 @@ class XpStateSingle
 		skillTime += delta;
 	}
 
+	LocalDate convertToLocalDate(int year, int month, int day)
+	{
+		try
+		{
+			String dateText = String.format("%04d-%02d-%02d", year, month, day);
+			return LocalDate.parse(dateText);
+		}
+		catch (Exception ex)
+		{
+			return LocalDate.parse("9999-12-31");
+		}
+	}
+
 	XpSnapshotSingle snapshot()
 	{
 		return XpSnapshotSingle.builder()
 			.startLevel(Experience.getLevelForXp(startLevelExp))
 			.endLevel(Experience.getLevelForXp(endLevelExp))
-			.startDate(getStartDate())
+			.startDay(getStartDay())
+			.startMonth(getStartMonth())
+			.startYear(getStartYear())
 			.xpGainedInSession(getTotalXpGained())
 			.xpRemainingToGoal(getXpRemaining())
 			.xpPerHour(getXpHr())
@@ -328,7 +349,9 @@ class XpStateSingle
 		XpSaveSingle save = new XpSaveSingle();
 		save.startXp = startXp;
 		save.endXp = endXp;
-		save.startDate = getStartDate();
+		save.startDay = startDay;
+		save.startMonth = startMonth;
+		save.startYear = startYear;
 		save.xpGainedBeforeReset = xpGainedBeforeReset;
 		save.xpGainedSinceReset = xpGainedSinceReset;
 		save.time = skillTime;
@@ -339,7 +362,9 @@ class XpStateSingle
 	{
 		startXp = save.startXp;
 		endXp = save.endXp;
-		startDate = save.startDate;
+		startDay = save.startDay;
+		startMonth = save.startMonth;
+		startYear = save.startYear;
 		xpGainedBeforeReset = save.xpGainedBeforeReset;
 		xpGainedSinceReset = save.xpGainedSinceReset;
 		skillTime = save.time;

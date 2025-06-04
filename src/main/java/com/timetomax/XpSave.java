@@ -29,7 +29,6 @@ import com.google.gson.annotations.SerializedName;
 import com.google.inject.Inject;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.time.LocalDate;
 import net.runelite.api.Skill;
 import net.runelite.client.config.ConfigSerializer;
 import net.runelite.client.config.Serializer;
@@ -47,8 +46,12 @@ class XpSaveSingle
 	long startXp;
 	@SerializedName("e")
 	long endXp;
-	@SerializedName("d")
-	LocalDate startDate;
+	@SerializedName("sd")
+	int startDay;
+	@SerializedName("sm")
+	int startMonth;
+	@SerializedName("sy")
+	int startYear;
 	@SerializedName("br")
 	int xpGainedBeforeReset;
 	@SerializedName("ar")

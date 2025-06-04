@@ -414,6 +414,12 @@ public class TimeToMaxPlugin extends Plugin
 		xpPanel.updateSkillExperience(updateResult == XpUpdateResult.UPDATED, xpPauseState.isPaused(skill),
 			skill, getSkillSnapshot(skill));
 
+		// Update the startDate for the skill if it isn't already set
+		if (xpState.getSkill(skill).getStartYear() == 9999)
+		{
+			xpState.getSkill(skill).updateStartDate(LocalDate.now().getDayOfMonth(), LocalDate.now().getMonthValue(),LocalDate.now().getYear());
+		}
+
 		// Also update the total experience
 		xpState.updateOverall(client.getOverallExperience());
 		xpPanel.updateTotal(xpState.getTotalSnapshot());
@@ -441,6 +447,10 @@ public class TimeToMaxPlugin extends Plugin
 					int intervalXp = XpCalculator.getRequiredXpPerInterval(startXp, config);
 					int goalXp = startXp + intervalXp;
 					skillState.updateGoals(startXp, goalXp);
+					if (xpState.getSkill(skill).getStartYear() == 9999)
+					{
+						xpState.getSkill(skill).updateStartDate(LocalDate.now().getDayOfMonth(), LocalDate.now().getMonthValue(),LocalDate.now().getYear());
+					}
 				}
 
 				// apply state to the panel
@@ -540,6 +550,11 @@ public class TimeToMaxPlugin extends Plugin
 		x.updateGoals(startXp, endGoalXp);
 		x.update(client.getSkillExperience(skill));
 
+		if (xpState.getSkill(skill).getStartYear() == 9999)
+		{
+			xpState.getSkill(skill).updateStartDate(LocalDate.now().getDayOfMonth(), LocalDate.now().getMonthValue(),LocalDate.now().getYear());
+		}
+
 		xpPanel.updateSkillExperience(true, xpPauseState.isPaused(skill),
 			skill, getSkillSnapshot(skill));
 	}
@@ -628,9 +643,19 @@ public class TimeToMaxPlugin extends Plugin
 		{
 			long skillExperience = client.getSkillExperience(skill);
 			xpPauseState.tickXp(skill, skillExperience, pauseSkillAfter);
-			if (earliestPeriodStart == null || xpState.getSkill(skill).getStartDate().isBefore(earliestPeriodStart))
+
+			if (xpState.getSkill(skill).getStartYear() == 9999)
 			{
-				earliestPeriodStart = xpState.getSkill(skill).getStartDate();
+				xpState.getSkill(skill).updateStartDate(LocalDate.now().getDayOfMonth(), LocalDate.now().getMonthValue(),LocalDate.now().getYear());
+			}
+
+			int startDay = xpState.getSkill(skill).getStartDay();
+			int startMonth = xpState.getSkill(skill).getStartMonth();
+			int startYear = xpState.getSkill(skill).getStartYear();
+			LocalDate startDate = xpState.getSkill(skill).convertToLocalDate(startYear, startMonth, startDay);
+			if (earliestPeriodStart == null || startDate.isBefore(earliestPeriodStart))
+			{
+				earliestPeriodStart = startDate;
 			}
 		}
 		xpPauseState.tickOverall(client.getOverallExperience(), pauseSkillAfter);
@@ -662,8 +687,8 @@ public class TimeToMaxPlugin extends Plugin
 
 		// If we have a period start date and we need to start a new period, trigger reset
 		if (earliestPeriodStart != null && 
-			XpCalculator.shouldStartNewPeriod(earliestPeriodStart,
-			config.trackingInterval()))
+			XpCalculator.shouldStartNewIntervalForDate(config.trackingInterval(), earliestPeriodStart)
+			&& client.getGameState().getState() >= GameState.LOADING.getState())
 		{
 			log.info("Interval change detected for {} interval - triggering reset", config.trackingInterval());
 			handleTTMReset();

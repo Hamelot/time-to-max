@@ -34,7 +34,9 @@ class XpSnapshotSingle
 {
 	private int startLevel;
 	private int endLevel;
-	private LocalDate startDate;
+	private int startDay;
+	private int startMonth;
+	private int startYear;
 	private int startGoalXp;
 	private int endGoalXp;
 	private int xpGainedInSession;
