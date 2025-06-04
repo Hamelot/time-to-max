@@ -87,16 +87,33 @@ public interface TimeToMaxConfig extends Config
 		position = 2,
 		keyName = "maxSkillMode",
 		name = "Max Skill Mode",
-		description = "Use level 99, or 200m as xp goal"
+		description = "Use level 99, 200m, or a custom xp count as xp goal"
 	)
 	default MaxSkillMode maxSkillMode()
 	{
 		return MaxSkillMode.NORMAL;
 	}
 
+	default boolean hideMinimumXpOverride()
+	{
+		return maxSkillMode() != MaxSkillMode.XP_OVERRIDE;
+	}
+
 	@ConfigItem(
 		section = maxingSection,
 		position = 3,
+		keyName = "minimumXpOverride",
+		name = "Minimum Xp Override",
+		description = "Amount of xp per non-99 to override the calculations, and give a countdown to max."
+	)
+	default int minimumXpOverride()
+	{
+		return 50_000;
+	}
+
+	@ConfigItem(
+		section = maxingSection,
+		position = 5,
 		keyName = "prioritizeRecentXpSkills",
 		name = "Move recently trained skills to top",
 		description = "Configures whether skills should be organized by most recently gained XP."
@@ -108,7 +125,7 @@ public interface TimeToMaxConfig extends Config
 
 	@ConfigItem(
 		section = maxingSection,
-		position = 4,
+		position = 6,
 		keyName = "pinCompletedSkillsToBottom",
 		name = "Pin completed skills to bottom",
 		description = "Configures whether completed skills should be pinned to the bottom of the list."
@@ -120,7 +137,7 @@ public interface TimeToMaxConfig extends Config
 
 	@ConfigItem(
 		section = maxingSection,
-		position = 5,
+		position = 7,
 		keyName = "collapseCompletedSkills",
 		name = "Collapse completed skills",
 		description = "Configures whether completed skills should be collapsed."

@@ -827,7 +827,7 @@ public class TimeToMaxPlugin extends Plugin
 
 		// Check if the changed key is one we need to respond to
 		if ("targetDate".equals(event.getKey()) || "trackingInterval".equals(event.getKey()) ||
-			"maxSkillMode".equals(event.getKey()))
+			"maxSkillMode".equals(event.getKey()) || "minimumXpOverride".equals(event.getKey()))
 		{
 			log.debug("Config changed: {} - Triggering recalculation", event.getKey());
 
@@ -843,7 +843,7 @@ public class TimeToMaxPlugin extends Plugin
 					final int currentLevel = Experience.getLevelForXp(currentXp);
 					final int startXp = getSkillState(skill).getStartXp() == -1 ? currentXp : (int) getSkillState(skill).getStartXp();
 
-					if (config.maxSkillMode() == MaxSkillMode.NORMAL)
+					if (config.maxSkillMode() == MaxSkillMode.NORMAL || config.maxSkillMode() == MaxSkillMode.XP_OVERRIDE)
 					{
 						// Remove skills over level 99
 						if (currentLevel >= Experience.MAX_REAL_LEVEL)

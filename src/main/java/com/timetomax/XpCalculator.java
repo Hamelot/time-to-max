@@ -31,7 +31,7 @@ public class XpCalculator
 		long daysUntilTarget = ChronoUnit.DAYS.between(LocalDate.now(), LocalDate.parse(config.targetDate()));
 		if (daysUntilTarget <= 0)
 		{
-			if (config.maxSkillMode() == MaxSkillMode.NORMAL)
+			if (config.maxSkillMode() == MaxSkillMode.NORMAL || config.maxSkillMode() == MaxSkillMode.XP_OVERRIDE)
 			{
 				return LEVEL_99_XP - startXp; // Target date is today or in the past
 			}
@@ -59,6 +59,10 @@ public class XpCalculator
 				return 0;
 			}
 
+		}
+		else if (config.maxSkillMode() == MaxSkillMode.XP_OVERRIDE)
+		{
+			return config.minimumXpOverride();
 		}
 
 		return (int) Math.ceil((double) xpRemaining / daysUntilTarget);

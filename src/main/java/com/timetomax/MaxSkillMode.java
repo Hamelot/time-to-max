@@ -3,7 +3,8 @@ package com.timetomax;
 public enum MaxSkillMode
 {
 	NORMAL("Normal"),
-	COMPLETIONIST("Completionist");
+	COMPLETIONIST("Completionist"),
+	XP_OVERRIDE("XpOverride");
 
 	private final String mode;
 
