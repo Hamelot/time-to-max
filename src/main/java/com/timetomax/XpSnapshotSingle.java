@@ -24,7 +24,6 @@
  */
 package com.timetomax;
 
-import java.time.LocalDate;
 import lombok.Builder;
 import lombok.Value;
 

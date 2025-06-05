@@ -90,8 +90,6 @@ class XpPanel extends PluginPanel
 	private final JCheckBox xpOverride = new JCheckBox();
 	private final JSpinner xpOverrideInput = new JSpinner(new SpinnerNumberModel(0, 0, Integer.MAX_VALUE, 1));
 	private boolean configExpanded = false;
-	// Reference to plugin for accessing injected dependencies
-	//private final TimeToMaxPlugin plugin;
 	private final ConfigManager configManager;
 
 	/* This displays the "track xp" text */
