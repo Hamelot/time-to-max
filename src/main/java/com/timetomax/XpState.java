@@ -218,6 +218,19 @@ class XpState
 		return xpSkills.get(skill);
 	}
 
+	int getLowestSkillXp()
+	{
+		int lowest = 200_000_000;
+		for (XpStateSingle state : xpSkills.values())
+		{
+			if (state.getStartXp() != -1 && state.getStartXp() < lowest)
+			{
+				lowest = (int) state.getStartXp();
+			}
+		}
+		return lowest;
+	}
+
 	private void updateOrder(Skill skill)
 	{
 		if (config.prioritizeRecentXpSkills())

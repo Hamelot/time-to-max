@@ -94,11 +94,6 @@ public interface TimeToMaxConfig extends Config
 		return MaxSkillMode.NORMAL;
 	}
 
-	default boolean hideMinimumXpOverride()
-	{
-		return maxSkillMode() != MaxSkillMode.XP_OVERRIDE;
-	}
-
 	@ConfigItem(
 		section = maxingSection,
 		position = 3,
@@ -109,6 +104,19 @@ public interface TimeToMaxConfig extends Config
 	default int minimumXpOverride()
 	{
 		return 50_000;
+	}
+
+	@ConfigItem(
+		section = maxingSection,
+		position = 4,
+		keyName = "targetDateWithXpOverride",
+		name = "Target Date with XP Override",
+		description = "Holds data for target date if user gets the minimum xp required with override setting.",
+		hidden = true
+	)
+	default String targetDateWithXpOverride()
+	{
+		return LocalDate.now().plusYears(1).toString();
 	}
 
 	@ConfigItem(

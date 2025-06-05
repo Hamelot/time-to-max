@@ -832,6 +832,21 @@ public class TimeToMaxPlugin extends Plugin
 		{
 			log.debug("Config changed: {} - Triggering recalculation", event.getKey());
 
+			if (config.maxSkillMode() == MaxSkillMode.XP_OVERRIDE)
+			{
+				// Get the lowest starting xp in xpState
+				int lowestStartXp = xpState.getLowestSkillXp();
+				LocalDate targetDateWithXpOverride = XpCalculator.getMaxDateForLowestSkillWithOverride(
+					lowestStartXp,
+					config);
+					if (targetDateWithXpOverride != null)
+					{
+						// Update the target date in the config if it is set to override
+						configManager.setConfiguration("timeToMax", "targetDateWithXpOverride", targetDateWithXpOverride.toString());
+					}
+			}
+
+
 			// Update the target panel with new config values
 			xpPanel.updateTargetPanel(config);
 

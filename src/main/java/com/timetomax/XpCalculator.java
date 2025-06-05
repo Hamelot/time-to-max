@@ -132,4 +132,19 @@ public class XpCalculator
 	{
 		return intervalStartDates.get(skill);
 	}
+
+	public static LocalDate getMaxDateForLowestSkillWithOverride(int lowestSkillXp, TimeToMaxConfig config)
+	{
+		if (config.maxSkillMode() == MaxSkillMode.XP_OVERRIDE)
+		{
+			var xpRequiredForMax = LEVEL_99_XP - lowestSkillXp;
+			var daysUntilTarget = (long) Math.ceil((double) xpRequiredForMax / config.minimumXpOverride());
+			if (daysUntilTarget <= 0)
+			{
+				return LocalDate.now();
+			}
+			return LocalDate.now().plusDays(daysUntilTarget);
+		}
+		return null;
+	}
 }

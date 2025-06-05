@@ -350,7 +350,7 @@ class XpPanel extends PluginPanel
 	{
 		try
 		{
-			LocalDate targetDate = LocalDate.parse(config.targetDate());
+			LocalDate targetDate = null;
 			TrackingInterval interval = config.trackingInterval();
 			LocalDate now = LocalDate.now();
 
@@ -361,6 +361,16 @@ class XpPanel extends PluginPanel
 
 			LocalDateTime currentTime = LocalDateTime.now();
 			LocalDateTime nextIntervalEnd;
+
+			if (config.maxSkillMode() == MaxSkillMode.XP_OVERRIDE)
+			{
+				// If XP override mode, use the configured minimum XP override
+				targetDate = LocalDate.parse(config.targetDateWithXpOverride());
+			}
+			else
+			{
+				targetDate = LocalDate.parse(config.targetDate());
+			}
 
 			switch (interval)
 			{
@@ -466,7 +476,8 @@ class XpPanel extends PluginPanel
 			refreshConfigControls(config);
 		}
 	}
-		/**
+
+	/**
 	 * Refreshes the config control values to match the current configuration
 	 */	private void refreshConfigControls(TimeToMaxConfig config)
 	{
