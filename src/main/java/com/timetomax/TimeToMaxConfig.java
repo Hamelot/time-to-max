@@ -168,6 +168,18 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
+		section = maxingSection,
+		position = 8,
+		keyName = "highlightLowestSkill",
+		name = "Highlight lowest skill",
+		description = "Paints a thin border around skill with the lowest xp"
+	)
+	default boolean highlightLowestSkill()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		section = infoLabelSection,
 		position = 0,
 		keyName = "logoutPausing",

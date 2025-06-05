@@ -58,6 +58,8 @@ class XpSaveSingle
 	int xpGainedSinceReset;
 	@SerializedName("t")
 	long time; // ms
+	@SerializedName("ls")
+	boolean lowestSkill;
 }
 
 class XpSaveSerializer implements Serializer<XpSave>

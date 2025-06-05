@@ -76,6 +76,10 @@ class XpStateSingle
 	private int startLevelExp = 0;
 	private int endLevelExp = 0;
 
+	@Getter
+	@Setter
+	private boolean lowestSkill = false;
+
 	XpStateSingle(long startXp, long endXp)
 	{
 		this.startXp = startXp;
@@ -341,6 +345,7 @@ class XpStateSingle
 			.timeTillGoalShort(getTimeTillLevel(XpGoalTimeType.SHORT))
 			.startGoalXp(startLevelExp)
 			.endGoalXp(endLevelExp)
+			.lowestSkill(lowestSkill)
 			.build();
 	}
 
@@ -352,6 +357,7 @@ class XpStateSingle
 		save.startDay = startDay;
 		save.startMonth = startMonth;
 		save.startYear = startYear;
+		save.lowestSkill = lowestSkill;
 		save.xpGainedBeforeReset = xpGainedBeforeReset;
 		save.xpGainedSinceReset = xpGainedSinceReset;
 		save.time = skillTime;
@@ -365,6 +371,7 @@ class XpStateSingle
 		startDay = save.startDay;
 		startMonth = save.startMonth;
 		startYear = save.startYear;
+		lowestSkill = save.lowestSkill;
 		xpGainedBeforeReset = save.xpGainedBeforeReset;
 		xpGainedSinceReset = save.xpGainedSinceReset;
 		skillTime = save.time;

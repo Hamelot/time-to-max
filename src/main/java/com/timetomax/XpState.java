@@ -1,6 +1,5 @@
 package com.timetomax;
 
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
@@ -218,7 +217,7 @@ class XpState
 		return xpSkills.get(skill);
 	}
 
-	int getLowestSkillXp()
+	int findLowestSkillXp()
 	{
 		int lowest = 200_000_000;
 		for (XpStateSingle state : xpSkills.values())
@@ -229,6 +228,14 @@ class XpState
 			}
 		}
 		return lowest;
+	}
+
+	void setLowestSkillFlag(int lowestXp)
+	{
+		for (XpStateSingle state : xpSkills.values())
+		{
+			state.setLowestSkill(state.getStartXp() == lowestXp);
+		}
 	}
 
 	private void updateOrder(Skill skill)

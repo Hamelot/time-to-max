@@ -89,6 +89,8 @@ class XpPanel extends PluginPanel
 	private final JComboBox<MaxSkillMode> maxSkillModeCombo = new JComboBox<>(MaxSkillMode.values());
 	private final JCheckBox xpOverride = new JCheckBox();
 	private final JSpinner xpOverrideInput = new JSpinner(new SpinnerNumberModel(0, 0, Integer.MAX_VALUE, 1));
+	private final JLabel highlightLowestSkillLabel = new JLabel(XpInfoBox.htmlLabel("Highlight lowest skill: ", ""));
+	private final JCheckBox highlightLowestSkill = new JCheckBox();
 	private boolean configExpanded = false;
 	private final ConfigManager configManager;
 
@@ -121,7 +123,7 @@ class XpPanel extends PluginPanel
 		
 		// Set up content panel
 		configContentPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-		configContentPanel.setLayout(new GridLayout(4, 2, 5, 5));
+		configContentPanel.setLayout(new GridLayout(5, 2, 5, 5));
 		configContentPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
 		// Target Date
 		configContentPanel.add(configTargetDateLabel);
@@ -157,6 +159,12 @@ class XpPanel extends PluginPanel
 		maxSkillModeCombo.addActionListener(e -> updateConfigValue("maxSkillMode", ((MaxSkillMode) maxSkillModeCombo.getSelectedItem()).name()));
 		configContentPanel.add(maxSkillModeCombo);
 
+		// Highlight Lowest Skill
+		configContentPanel.add(highlightLowestSkillLabel);
+		highlightLowestSkill.setSelected(config.highlightLowestSkill());
+		highlightLowestSkill.addActionListener(e -> updateConfigValue("highlightLowestSkill", highlightLowestSkill.isSelected() ? "true" : "false"));
+		configContentPanel.add(highlightLowestSkill);
+
 		// Xp Override
 		configContentPanel.add(new JLabel("Override Xp"));
 		xpOverride.setSelected(config.xpOverride());
@@ -166,7 +174,7 @@ class XpPanel extends PluginPanel
 		// If Max Skill Mode is Xp Override, then show xp Override
 		if (config.xpOverride())
 		{
-			configContentPanel.setLayout(new GridLayout(5, 2, 5, 5));
+			configContentPanel.setLayout(new GridLayout(6, 2, 5, 5));
 			configContentPanel.add(xpOverrideLabel);
 			xpOverrideInput.setValue(config.minimumXpOverride());
 			xpOverrideInput.addChangeListener(e -> updateConfigValue("minimumXpOverride", xpOverrideInput.getValue().toString()));
@@ -513,7 +521,7 @@ class XpPanel extends PluginPanel
 				{
 					if (xpOverrideLabel.getParent() != configContentPanel)
 					{
-						configContentPanel.setLayout(new GridLayout(5, 2, 5, 5));
+						configContentPanel.setLayout(new GridLayout(6, 2, 5, 5));
 						configContentPanel.add(xpOverrideLabel);
 						xpOverrideInput.setValue(config.minimumXpOverride());
 						xpOverrideInput.addChangeListener(e -> updateConfigValue("minimumXpOverride", xpOverrideInput.getValue().toString()));
@@ -522,7 +530,7 @@ class XpPanel extends PluginPanel
 				}
 				else
 				{
-					configContentPanel.setLayout(new GridLayout(4, 2, 5, 5));
+					configContentPanel.setLayout(new GridLayout(5, 2, 5, 5));
 					configContentPanel.remove(xpOverrideLabel);
 					xpOverrideInput.removeChangeListener(e -> updateConfigValue("minimumXpOverride", xpOverrideInput.getValue().toString()));
 					configContentPanel.remove(xpOverrideInput);

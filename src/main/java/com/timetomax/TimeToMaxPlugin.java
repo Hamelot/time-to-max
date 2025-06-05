@@ -426,6 +426,10 @@ public class TimeToMaxPlugin extends Plugin
 
 		// Update the target panel to reflect current XP rates
 		xpPanel.updateTargetPanel(config);
+
+		// Get the lowest starting xp in xpState
+		int lowestStartXp = xpState.findLowestSkillXp();
+		xpState.setLowestSkillFlag(lowestStartXp);
 	}
 
 	@Subscribe
@@ -510,6 +514,9 @@ public class TimeToMaxPlugin extends Plugin
 				log.debug("Initializing XP tracker with {} overall exp", overallXp);
 				xpState.initializeOverall(overallXp);
 			}
+
+			int lowestStartXp = xpState.findLowestSkillXp();
+			xpState.setLowestSkillFlag(lowestStartXp);
 		}
 
 	}
@@ -829,14 +836,16 @@ public class TimeToMaxPlugin extends Plugin
 		// Check if the changed key is one we need to respond to
 		if ("targetDate".equals(event.getKey()) || "trackingInterval".equals(event.getKey()) ||
 			"maxSkillMode".equals(event.getKey()) || "xpOverride".equals(event.getKey()) ||
-			"minimumXpOverride".equals(event.getKey()))
+			"minimumXpOverride".equals(event.getKey()) || "highlightLowestSkill".equals(event.getKey()))
 		{
 			log.debug("Config changed: {} - Triggering recalculation", event.getKey());
 
+			// Get the lowest starting xp in xpState
+			int lowestStartXp = xpState.findLowestSkillXp();
+			xpState.setLowestSkillFlag(lowestStartXp);
+
 			if (config.xpOverride())
 			{
-				// Get the lowest starting xp in xpState
-				int lowestStartXp = xpState.getLowestSkillXp();
 				LocalDate targetDateWithXpOverride = XpCalculator.getMaxDateForLowestSkillWithOverride(
 					lowestStartXp,
 					config);

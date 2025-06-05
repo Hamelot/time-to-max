@@ -42,6 +42,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.LineBorder;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 import lombok.AccessLevel;
@@ -79,9 +80,9 @@ class XpInfoBox extends JPanel
 
 	private static final String REMOVE_STATE = "Remove from canvas";
 	private static final String ADD_STATE = "Add to canvas";
-
 	private static final EmptyBorder DEFAULT_PROGRESS_WRAPPER_BORDER = new EmptyBorder(0, 7, 7, 7);
 	private static final EmptyBorder COMPACT_PROGRESS_WRAPPER_BORDER = new EmptyBorder(5, 1, 5, 5);
+	private static final LineBorder LOWEST_SKILL_BORDER = new LineBorder(ColorScheme.BRAND_ORANGE, 1);
 
 	// Instance members
 	private final JComponent panel;
@@ -405,13 +406,22 @@ class XpInfoBox extends JPanel
 			paused = false;
 			pauseSkill.setText("Pause");
 		}
-
 		// Update information labels
 		// Update exp per hour separately, every time (not only when there's an update)
 		topLeftStat.setText(htmlLabel(config.xpPanelLabel1(), xpSnapshotSingle));
 		topRightStat.setText(htmlLabel(config.xpPanelLabel2(), xpSnapshotSingle));
 		bottomLeftStat.setText(htmlLabel(config.xpPanelLabel3(), xpSnapshotSingle));
 		bottomRightStat.setText(htmlLabel(config.xpPanelLabel4(), xpSnapshotSingle));
+		
+		// Apply outline border if this skill has the lowest XP
+		if (config.highlightLowestSkill() && xpSnapshotSingle.isLowestSkill())
+		{
+			container.setBorder(LOWEST_SKILL_BORDER);
+		}
+		else
+		{
+			container.setBorder(null);
+		}
 	}
 
 	private String htmlLabel(XpPanelLabel panelLabel, XpSnapshotSingle xpSnapshotSingle)
