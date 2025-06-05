@@ -31,7 +31,7 @@ public class XpCalculator
 		long daysUntilTarget = ChronoUnit.DAYS.between(LocalDate.now(), LocalDate.parse(config.targetDate()));
 		if (daysUntilTarget <= 0)
 		{
-			if (config.maxSkillMode() == MaxSkillMode.NORMAL || config.maxSkillMode() == MaxSkillMode.XP_OVERRIDE)
+			if (config.maxSkillMode().equals(MaxSkillMode.NORMAL))
 			{
 				return LEVEL_99_XP - startXp; // Target date is today or in the past
 			}
@@ -42,6 +42,11 @@ public class XpCalculator
 		}
 
 		int xpRemaining = 0;
+
+		if (config.xpOverride())
+		{
+			return config.minimumXpOverride();
+		}
 
 		if (config.maxSkillMode() == MaxSkillMode.NORMAL)
 		{
@@ -59,10 +64,6 @@ public class XpCalculator
 				return 0;
 			}
 
-		}
-		else if (config.maxSkillMode() == MaxSkillMode.XP_OVERRIDE)
-		{
-			return config.minimumXpOverride();
 		}
 
 		return (int) Math.ceil((double) xpRemaining / daysUntilTarget);
@@ -135,10 +136,20 @@ public class XpCalculator
 
 	public static LocalDate getMaxDateForLowestSkillWithOverride(int lowestSkillXp, TimeToMaxConfig config)
 	{
-		if (config.maxSkillMode() == MaxSkillMode.XP_OVERRIDE)
+		if (config.xpOverride())
 		{
-			var xpRequiredForMax = LEVEL_99_XP - lowestSkillXp;
-			var daysUntilTarget = (long) Math.ceil((double) xpRequiredForMax / config.minimumXpOverride());
+			int xpRequired = MAX_XP;
+
+			if (config.maxSkillMode().equals(MaxSkillMode.NORMAL))
+			{
+				xpRequired = LEVEL_99_XP - lowestSkillXp;
+			}
+			else if (config.maxSkillMode().equals(MaxSkillMode.COMPLETIONIST))
+			{
+				xpRequired = MAX_XP - lowestSkillXp;
+			}
+
+			var daysUntilTarget = (long) Math.ceil((double) xpRequired / config.minimumXpOverride());
 			if (daysUntilTarget <= 0)
 			{
 				return LocalDate.now();

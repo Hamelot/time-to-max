@@ -97,8 +97,20 @@ public interface TimeToMaxConfig extends Config
 	@ConfigItem(
 		section = maxingSection,
 		position = 3,
+		keyName = "xpOverride",
+		name = "Override Xp",
+		description = "Use provided minimum xp values in target calculation"
+	)
+	default boolean xpOverride()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		section = maxingSection,
+		position = 4,
 		keyName = "minimumXpOverride",
-		name = "Minimum Xp Override",
+		name = "Minimum Daily Xp",
 		description = "Amount of xp per non-99 to override the calculations, and give a countdown to max."
 	)
 	default int minimumXpOverride()
@@ -108,7 +120,7 @@ public interface TimeToMaxConfig extends Config
 
 	@ConfigItem(
 		section = maxingSection,
-		position = 4,
+		position = 5,
 		keyName = "targetDateWithXpOverride",
 		name = "Target Date with XP Override",
 		description = "Holds data for target date if user gets the minimum xp required with override setting.",
@@ -121,7 +133,7 @@ public interface TimeToMaxConfig extends Config
 
 	@ConfigItem(
 		section = maxingSection,
-		position = 5,
+		position = 6,
 		keyName = "prioritizeRecentXpSkills",
 		name = "Move recently trained skills to top",
 		description = "Configures whether skills should be organized by most recently gained XP."
@@ -133,7 +145,7 @@ public interface TimeToMaxConfig extends Config
 
 	@ConfigItem(
 		section = maxingSection,
-		position = 6,
+		position = 7,
 		keyName = "pinCompletedSkillsToBottom",
 		name = "Pin completed skills to bottom",
 		description = "Configures whether completed skills should be pinned to the bottom of the list."
