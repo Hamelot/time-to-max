@@ -439,6 +439,7 @@ public class TimeToMaxPlugin extends Plugin
 			{
 				log.debug("Loading xp state from save");
 				xpState.restore(save);
+				LocalDate now = LocalDate.now();
 
 				for (Skill skill : save.skills.keySet())
 				{
@@ -449,7 +450,7 @@ public class TimeToMaxPlugin extends Plugin
 					skillState.updateGoals(startXp, goalXp);
 					if (xpState.getSkill(skill).getStartYear() == 9999)
 					{
-						xpState.getSkill(skill).updateStartDate(LocalDate.now().getDayOfMonth(), LocalDate.now().getMonthValue(),LocalDate.now().getYear());
+						xpState.getSkill(skill).updateStartDate(now.getDayOfMonth(), now.getMonthValue(),now.getYear());
 					}
 				}
 
@@ -605,7 +606,7 @@ public class TimeToMaxPlugin extends Plugin
 	{
 		if (commandExecuted.getCommand().equals("ttmreset"))
 		{
-			log.info("TTM Reset command triggered by command");
+			log.debug("TTM Reset command triggered by command");
 			handleTTMReset();
 			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "TTM has been reset by user.", null);
 		}
