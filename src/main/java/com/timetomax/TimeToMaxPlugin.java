@@ -397,6 +397,12 @@ public class TimeToMaxPlugin extends Plugin
 			return;
 		}
 
+		// Get the lowest starting xp in xpState before any changes
+		int lowestStartXp = xpState.findLowestSkillXp();
+		
+		// Set the initial lowest skill flags for comparison
+		xpState.setLowestSkillFlag(lowestStartXp);
+
 		// Calculate goal XP values using the period tracking system
 		final int goalStartXp = (int) getSkillState(skill).getStartXp();
 		final int intervalXp = XpCalculator.getRequiredXpPerInterval(
@@ -411,13 +417,25 @@ public class TimeToMaxPlugin extends Plugin
 			goalStartXp,
 			goalEndXp);
 
-		xpPanel.updateSkillExperience(updateResult == XpUpdateResult.UPDATED, xpPauseState.isPaused(skill),
-			skill, getSkillSnapshot(skill));
-
 		// Update the startDate for the skill if it isn't already set
 		if (xpState.getSkill(skill).getStartYear() == 9999)
 		{
 			xpState.getSkill(skill).updateStartDate(LocalDate.now().getDayOfMonth(), LocalDate.now().getMonthValue(),LocalDate.now().getYear());
+		}
+		
+		// Recalculate lowest skill flag after skill state update
+		int lowestStartXpAfterUpdate = xpState.findLowestSkillXp();
+		xpState.setLowestSkillFlag(lowestStartXpAfterUpdate);
+
+		// Update the skill that changed
+		xpPanel.updateSkillExperience(updateResult == XpUpdateResult.UPDATED, xpPauseState.isPaused(skill),
+			skill, getSkillSnapshot(skill));
+		
+		// If the lowest skill changed or we have a significant state change, update all skills to refresh the highlighting
+		if (lowestStartXp != lowestStartXpAfterUpdate || updateResult == XpUpdateResult.INITIALIZED)
+		{
+			log.debug("Rebuilding all skills due to lowest skill change or initialization");
+			rebuildSkills();
 		}
 
 		// Also update the total experience
@@ -510,6 +528,9 @@ public class TimeToMaxPlugin extends Plugin
 				log.debug("Initializing XP tracker with {} overall exp", overallXp);
 				xpState.initializeOverall(overallXp);
 			}
+
+			int lowestStartXp = xpState.findLowestSkillXp();
+			xpState.setLowestSkillFlag(lowestStartXp);
 		}
 
 	}
@@ -724,10 +745,6 @@ public class TimeToMaxPlugin extends Plugin
 			saveSaveState(profile, save);
 			log.debug("Saved XP state for profile: {}", profile);
 		}
-
-		// Check for interval reset - should be skill-agnostic to avoid multiple resets
-		TrackingInterval interval = config.trackingInterval();
-		
 		// Find the earliest period start date from any skill
 		LocalDate earliestPeriodStart = null;
 		for (Skill skill : Skill.values())
@@ -828,9 +845,27 @@ public class TimeToMaxPlugin extends Plugin
 
 		// Check if the changed key is one we need to respond to
 		if ("targetDate".equals(event.getKey()) || "trackingInterval".equals(event.getKey()) ||
-			"maxSkillMode".equals(event.getKey()))
+			"maxSkillMode".equals(event.getKey()) || "xpOverride".equals(event.getKey()) ||
+			"minimumXpOverride".equals(event.getKey()) || "highlightLowestSkill".equals(event.getKey()))
 		{
 			log.debug("Config changed: {} - Triggering recalculation", event.getKey());
+
+			// Get the lowest starting xp in xpState
+			int lowestStartXp = xpState.findLowestSkillXp();
+			xpState.setLowestSkillFlag(lowestStartXp);
+
+			if (config.xpOverride())
+			{
+				LocalDate targetDateWithXpOverride = XpCalculator.getMaxDateForLowestSkillWithOverride(
+					lowestStartXp,
+					config);
+					if (targetDateWithXpOverride != null)
+					{
+						// Update the target date in the config if it is set to override
+						configManager.setConfiguration("timeToMax", "targetDateWithXpOverride", targetDateWithXpOverride.toString());
+					}
+			}
+
 
 			// Update the target panel with new config values
 			xpPanel.updateTargetPanel(config);
@@ -844,7 +879,7 @@ public class TimeToMaxPlugin extends Plugin
 					final int currentLevel = Experience.getLevelForXp(currentXp);
 					final int startXp = getSkillState(skill).getStartXp() == -1 ? currentXp : (int) getSkillState(skill).getStartXp();
 
-					if (config.maxSkillMode() == MaxSkillMode.NORMAL)
+					if (config.maxSkillMode().equals(MaxSkillMode.NORMAL))
 					{
 						// Remove skills over level 99
 						if (currentLevel >= Experience.MAX_REAL_LEVEL)

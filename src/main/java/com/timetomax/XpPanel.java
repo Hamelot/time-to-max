@@ -38,12 +38,14 @@ import java.util.Map;
 import javax.swing.BoxLayout;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
+import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
@@ -74,8 +76,10 @@ class XpPanel extends PluginPanel
 	// New panel for target XP information
 	private final JPanel targetPanel = new JPanel();
 	private final JLabel targetDateLabel = new JLabel(XpInfoBox.htmlLabel("Target Date: ", ""));
+	private final JLabel configTargetDateLabel = new JLabel(XpInfoBox.htmlLabel("Target Date: ", ""));
 	private final JLabel targetIntervalLabel = new JLabel(XpInfoBox.htmlLabel("Tracking: ", ""));
 	private final JLabel intervalsRemainingLabel = new JLabel(XpInfoBox.htmlLabel("Intervals remaining: ", ""));
+	private final JLabel xpOverrideLabel = new JLabel(XpInfoBox.htmlLabel("Daily Xp: ", ""));
 	// Configuration controls panel
 	private final JPanel configPanel = new JPanel();
 	private final JPanel configHeaderPanel = new JPanel();
@@ -83,9 +87,11 @@ class XpPanel extends PluginPanel
 	private final JSpinner targetDateSpinner = new JSpinner(new SpinnerDateModel());
 	private final JComboBox<TrackingInterval> trackingIntervalCombo = new JComboBox<>(TrackingInterval.values());
 	private final JComboBox<MaxSkillMode> maxSkillModeCombo = new JComboBox<>(MaxSkillMode.values());
+	private final JCheckBox xpOverride = new JCheckBox();
+	private final JSpinner xpOverrideInput = new JSpinner(new SpinnerNumberModel(0, 0, Integer.MAX_VALUE, 1));
+	private final JLabel highlightLowestSkillLabel = new JLabel(XpInfoBox.htmlLabel("Highlight lowest skill: ", ""));
+	private final JCheckBox highlightLowestSkill = new JCheckBox();
 	private boolean configExpanded = false;
-	// Reference to plugin for accessing injected dependencies
-	//private final TimeToMaxPlugin plugin;
 	private final ConfigManager configManager;
 
 	/* This displays the "track xp" text */
@@ -117,11 +123,11 @@ class XpPanel extends PluginPanel
 		
 		// Set up content panel
 		configContentPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-		configContentPanel.setLayout(new GridLayout(6, 2, 5, 5));
+		configContentPanel.setLayout(new GridLayout(5, 2, 5, 5));
 		configContentPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
-				// Target Date
-		configContentPanel.add(new JLabel("Target Date:"));
-		
+		// Target Date
+		configContentPanel.add(configTargetDateLabel);
+
 		// Set up date spinner
 		targetDateSpinner.setEditor(new JSpinner.DateEditor(targetDateSpinner, "yyyy-MM-dd"));
 		try {
@@ -132,15 +138,15 @@ class XpPanel extends PluginPanel
 			// Default to today's date if parsing fails
 			targetDateSpinner.setValue(new Date());
 		}
-		
+
 		targetDateSpinner.addChangeListener(e -> {
 			Date selectedDate = (Date) targetDateSpinner.getValue();
 			LocalDate localDate = selectedDate.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
 			updateConfigValue("targetDate", localDate.toString());
 		});
-		
+
 		configContentPanel.add(targetDateSpinner);
-		
+
 		// Tracking Interval
 		configContentPanel.add(new JLabel("Tracking Interval:"));
 		trackingIntervalCombo.setSelectedItem(config.trackingInterval());
@@ -152,12 +158,34 @@ class XpPanel extends PluginPanel
 		maxSkillModeCombo.setSelectedItem(config.maxSkillMode());
 		maxSkillModeCombo.addActionListener(e -> updateConfigValue("maxSkillMode", ((MaxSkillMode) maxSkillModeCombo.getSelectedItem()).name()));
 		configContentPanel.add(maxSkillModeCombo);
-		
+
+		// Highlight Lowest Skill
+		configContentPanel.add(highlightLowestSkillLabel);
+		highlightLowestSkill.setSelected(config.highlightLowestSkill());
+		highlightLowestSkill.addActionListener(e -> updateConfigValue("highlightLowestSkill", highlightLowestSkill.isSelected() ? "true" : "false"));
+		configContentPanel.add(highlightLowestSkill);
+
+		// Xp Override
+		configContentPanel.add(new JLabel("Override Xp"));
+		xpOverride.setSelected(config.xpOverride());
+		xpOverride.addActionListener(e -> updateConfigValue("xpOverride", xpOverride.isSelected() ? "true" : "false"));
+		configContentPanel.add(xpOverride);
+
+		// If Max Skill Mode is Xp Override, then show xp Override
+		if (config.xpOverride())
+		{
+			configContentPanel.setLayout(new GridLayout(6, 2, 5, 5));
+			configContentPanel.add(xpOverrideLabel);
+			xpOverrideInput.setValue(config.minimumXpOverride());
+			xpOverrideInput.addChangeListener(e -> updateConfigValue("minimumXpOverride", xpOverrideInput.getValue().toString()));
+			configContentPanel.add(xpOverrideInput);
+		}
+
 		// Start collapsed by default
 		configContentPanel.setVisible(false);
 		configExpanded = false;
 	}
-	
+
 	/**
 	 * Toggles the visibility of the config panel content
 	 */
@@ -350,7 +378,7 @@ class XpPanel extends PluginPanel
 	{
 		try
 		{
-			LocalDate targetDate = LocalDate.parse(config.targetDate());
+			LocalDate targetDate = null;
 			TrackingInterval interval = config.trackingInterval();
 			LocalDate now = LocalDate.now();
 
@@ -361,6 +389,16 @@ class XpPanel extends PluginPanel
 
 			LocalDateTime currentTime = LocalDateTime.now();
 			LocalDateTime nextIntervalEnd;
+
+			if (config.xpOverride())
+			{
+				// If XP override mode, use the configured minimum XP override
+				targetDate = LocalDate.parse(config.targetDateWithXpOverride());
+			}
+			else
+			{
+				targetDate = LocalDate.parse(config.targetDate());
+			}
 
 			switch (interval)
 			{
@@ -466,7 +504,8 @@ class XpPanel extends PluginPanel
 			refreshConfigControls(config);
 		}
 	}
-		/**
+
+	/**
 	 * Refreshes the config control values to match the current configuration
 	 */	private void refreshConfigControls(TimeToMaxConfig config)
 	{
@@ -476,6 +515,26 @@ class XpPanel extends PluginPanel
 				LocalDate configDate = LocalDate.parse(config.targetDate());
 				Date date = Date.from(configDate.atStartOfDay().atZone(java.time.ZoneId.systemDefault()).toInstant());
 				targetDateSpinner.setValue(date);
+
+				// Only add xpOverride controls if not already present and mode is XP_OVERRIDE
+				if (config.xpOverride())
+				{
+					if (xpOverrideLabel.getParent() != configContentPanel)
+					{
+						configContentPanel.setLayout(new GridLayout(6, 2, 5, 5));
+						configContentPanel.add(xpOverrideLabel);
+						xpOverrideInput.setValue(config.minimumXpOverride());
+						xpOverrideInput.addChangeListener(e -> updateConfigValue("minimumXpOverride", xpOverrideInput.getValue().toString()));
+						configContentPanel.add(xpOverrideInput);
+					}
+				}
+				else
+				{
+					configContentPanel.setLayout(new GridLayout(5, 2, 5, 5));
+					configContentPanel.remove(xpOverrideLabel);
+					xpOverrideInput.removeChangeListener(e -> updateConfigValue("minimumXpOverride", xpOverrideInput.getValue().toString()));
+					configContentPanel.remove(xpOverrideInput);
+				}
 			} catch (Exception e) {
 				// Default to today's date if parsing fails
 				targetDateSpinner.setValue(new Date());

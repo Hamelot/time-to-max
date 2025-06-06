@@ -87,7 +87,7 @@ public interface TimeToMaxConfig extends Config
 		position = 2,
 		keyName = "maxSkillMode",
 		name = "Max Skill Mode",
-		description = "Use level 99, or 200m as xp goal"
+		description = "Use level 99, 200m, or a custom xp count as xp goal"
 	)
 	default MaxSkillMode maxSkillMode()
 	{
@@ -97,6 +97,43 @@ public interface TimeToMaxConfig extends Config
 	@ConfigItem(
 		section = maxingSection,
 		position = 3,
+		keyName = "xpOverride",
+		name = "Override Xp",
+		description = "Use provided minimum xp values in target calculation"
+	)
+	default boolean xpOverride()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		section = maxingSection,
+		position = 4,
+		keyName = "minimumXpOverride",
+		name = "Minimum Daily Xp",
+		description = "Amount of xp per non-99 to override the calculations, and give a countdown to max."
+	)
+	default int minimumXpOverride()
+	{
+		return 50_000;
+	}
+
+	@ConfigItem(
+		section = maxingSection,
+		position = 5,
+		keyName = "targetDateWithXpOverride",
+		name = "Target Date with XP Override",
+		description = "Holds data for target date if user gets the minimum xp required with override setting.",
+		hidden = true
+	)
+	default String targetDateWithXpOverride()
+	{
+		return LocalDate.now().plusYears(1).toString();
+	}
+
+	@ConfigItem(
+		section = maxingSection,
+		position = 6,
 		keyName = "prioritizeRecentXpSkills",
 		name = "Move recently trained skills to top",
 		description = "Configures whether skills should be organized by most recently gained XP."
@@ -108,7 +145,7 @@ public interface TimeToMaxConfig extends Config
 
 	@ConfigItem(
 		section = maxingSection,
-		position = 4,
+		position = 7,
 		keyName = "pinCompletedSkillsToBottom",
 		name = "Pin completed skills to bottom",
 		description = "Configures whether completed skills should be pinned to the bottom of the list."
@@ -120,12 +157,24 @@ public interface TimeToMaxConfig extends Config
 
 	@ConfigItem(
 		section = maxingSection,
-		position = 5,
+		position = 7,
 		keyName = "collapseCompletedSkills",
 		name = "Collapse completed skills",
 		description = "Configures whether completed skills should be collapsed."
 	)
 	default boolean collapseCompletedSkills()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		section = maxingSection,
+		position = 8,
+		keyName = "highlightLowestSkill",
+		name = "Highlight lowest skill",
+		description = "Paints a thin border around skill with the lowest xp"
+	)
+	default boolean highlightLowestSkill()
 	{
 		return true;
 	}

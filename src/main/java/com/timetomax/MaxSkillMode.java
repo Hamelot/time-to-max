@@ -2,8 +2,8 @@ package com.timetomax;
 
 public enum MaxSkillMode
 {
-	NORMAL("Normal"),
-	COMPLETIONIST("Completionist");
+	NORMAL("99"),
+	COMPLETIONIST("200m");
 
 	private final String mode;
 

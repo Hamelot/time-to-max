@@ -24,7 +24,6 @@
  */
 package com.timetomax;
 
-import java.time.LocalDate;
 import lombok.Builder;
 import lombok.Value;
 
@@ -49,4 +48,5 @@ class XpSnapshotSingle
 	private String timeTillGoal;
 	private String timeTillGoalHours;
 	private String timeTillGoalShort;
+	private boolean lowestSkill;
 }
