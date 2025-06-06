@@ -222,9 +222,13 @@ class XpState
 		int lowest = 200_000_000;
 		for (XpStateSingle state : xpSkills.values())
 		{
-			if (state.getStartXp() != -1 && state.getStartXp() < lowest)
+			if (state.getStartXp() != -1)
 			{
-				lowest = (int) state.getStartXp();
+				int currentXp = (int) state.getCurrentXp();
+				if (currentXp < lowest)
+				{
+					lowest = currentXp;
+				}
 			}
 		}
 		return lowest;
@@ -232,9 +236,15 @@ class XpState
 
 	void setLowestSkillFlag(int lowestXp)
 	{
-		for (XpStateSingle state : xpSkills.values())
+		log.debug("Setting lowest skill flag for current XP value: {}", lowestXp);
+		for (Map.Entry<Skill, XpStateSingle> entry : xpSkills.entrySet())
 		{
-			state.setLowestSkill(state.getStartXp() == lowestXp);
+			Skill skill = entry.getKey();
+			XpStateSingle state = entry.getValue();
+			int currentXp = (int) state.getCurrentXp();
+			boolean isLowest = currentXp == lowestXp;
+			state.setLowestSkill(isLowest);
+			log.debug("Skill {} (currentXp: {}) set to lowestSkill: {}", skill, currentXp, isLowest);
 		}
 	}
 
