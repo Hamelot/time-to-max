@@ -51,6 +51,12 @@ A RuneLite plugin that helps you track your progress towards maxing all skills i
 
 - **Normal vs Completionist Mode**: Toggle between tracking time to max for level 99 in all skills or achieving 200 million XP in all skills.
 
+### XP Override and Custom Calculations
+
+- **Override XP Values**: Manually override XP values for any skill to customize your tracking calculations
+- **Custom Calculation Logic**: Drive all calculation logic from your custom XP values rather than actual in-game XP
+- **Focus Assistance**: Option to mark the lowest skill with a visual outline to help focus on skills that need the most attention
+
 ## How to Use
 
 1. Install the plugin through the RuneLite Plugin Hub
@@ -80,6 +86,12 @@ A RuneLite plugin that helps you track your progress towards maxing all skills i
 - **Progress Bar Style**: Choose between percentage or time-to-level displays
 - **Tooltip Content**: Customize what information appears in tooltips
 - **Skill Organization**: Configure how skills are sorted and displayed
+- **Lowest Skill Outline**: Toggle visual outline on the skill with the lowest progress to help focus your training
+
+### Advanced Settings
+
+- **XP Override**: Manually set custom XP values for any skill to override actual game values
+- **Custom Calculations**: Use overridden XP values as the basis for all plugin calculations and projections
 
 ## Tips for Success
 
