@@ -3,6 +3,7 @@ package com.timetomax;
 import java.time.LocalDate;
 import java.time.temporal.ChronoField;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.IsoFields;
 import java.util.HashMap;
 import java.util.Map;
 import net.runelite.api.Skill;
@@ -113,7 +114,7 @@ public class XpCalculator
 				return !now.equals(referenceDate);
 			case WEEK:
 				// Check if the current date is in a different ISO week than the reference date
-				return now.get(ChronoField.ALIGNED_WEEK_OF_YEAR) != referenceDate.get(ChronoField.ALIGNED_WEEK_OF_YEAR)
+				return now.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR) != referenceDate.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)
 						|| now.getYear() != referenceDate.getYear();
 			case MONTH:
 				// Check if the current date is in a different calendar month than the reference date
