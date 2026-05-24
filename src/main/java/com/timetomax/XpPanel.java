@@ -80,6 +80,12 @@ class XpPanel extends PluginPanel
 	private final JLabel targetIntervalLabel = new JLabel(XpInfoBox.htmlLabel("Tracking: ", ""));
 	private final JLabel intervalsRemainingLabel = new JLabel(XpInfoBox.htmlLabel("Intervals remaining: ", ""));
 	private final JLabel xpOverrideLabel = new JLabel(XpInfoBox.htmlLabel("Daily Xp: ", ""));
+	// Dev-only label showing the effective wall clock (real or overridden). Only added to the
+	// panel when -Dtimetomax.dev=true was passed to the JVM.
+	private final JLabel devTimeLabel = new JLabel();
+	private static final boolean DEV_MODE = Boolean.getBoolean("timetomax.dev");
+	private static final java.time.format.DateTimeFormatter DEV_TIME_FORMAT =
+		java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 	// Configuration controls panel
 	private final JPanel configPanel = new JPanel();
 	private final JPanel configHeaderPanel = new JPanel();
@@ -287,7 +293,14 @@ class XpPanel extends PluginPanel
 		targetDateLabel.setFont(FontManager.getRunescapeSmallFont());
 		targetIntervalLabel.setFont(FontManager.getRunescapeSmallFont());
 		intervalsRemainingLabel.setFont(FontManager.getRunescapeSmallFont());
+		devTimeLabel.setFont(FontManager.getRunescapeSmallFont());
+		devTimeLabel.setForeground(java.awt.Color.ORANGE);
 
+		if (DEV_MODE)
+		{
+			targetPanel.setLayout(new GridLayout(5, 1));
+			targetPanel.add(devTimeLabel);
+		}
 		targetPanel.add(targetDateLabel);
 		targetPanel.add(targetIntervalLabel);
 		targetPanel.add(intervalsRemainingLabel);
@@ -371,6 +384,23 @@ class XpPanel extends PluginPanel
 		overallExpHour.setText(XpInfoBox.htmlLabel("Per hour: ", xpSnapshotTotal.getXpPerHour()));
 	}
 
+	private static String formatOffset(Duration off)
+	{
+		long secs = off.getSeconds();
+		String sign = secs < 0 ? "-" : "+";
+		secs = Math.abs(secs);
+		long days = secs / 86400;
+		long hours = (secs % 86400) / 3600;
+		long minutes = (secs % 3600) / 60;
+		long seconds = secs % 60;
+		StringBuilder sb = new StringBuilder(sign);
+		if (days > 0) sb.append(days).append("d");
+		if (hours > 0) sb.append(hours).append("h");
+		if (minutes > 0) sb.append(minutes).append("m");
+		if (seconds > 0 || sb.length() == 1) sb.append(seconds).append("s");
+		return sb.toString();
+	}
+
 	/**
 	 * Updates the target panel with the current configuration values
 	 */
@@ -380,15 +410,22 @@ class XpPanel extends PluginPanel
 		{
 			LocalDate targetDate = null;
 			TrackingInterval interval = config.trackingInterval();
-			LocalDate now = LocalDate.now();
+			LocalDate now = XpCalculator.today();
 
 			long intervalsRemaining;
 			String timeLeftInCurrentInterval;
 			String intervalUnit;
 			String currentIntervalLabel;
 
-			LocalDateTime currentTime = LocalDateTime.now();
+			LocalDateTime currentTime = XpCalculator.now();
 			LocalDateTime nextIntervalEnd;
+
+			if (DEV_MODE)
+			{
+				Duration off = XpCalculator.getTimeOffset();
+				String offText = off.isZero() ? "no offset" : formatOffset(off);
+				devTimeLabel.setText(XpInfoBox.htmlLabel("Dev clock: ", DEV_TIME_FORMAT.format(currentTime) + " [" + offText + "]"));
+			}
 
 			if (config.xpOverride())
 			{
@@ -479,6 +516,11 @@ class XpPanel extends PluginPanel
 			timeLeftLabel.setFont(FontManager.getRunescapeSmallFont());
 
 			targetPanel.removeAll();
+			if (DEV_MODE)
+			{
+				targetPanel.setLayout(new GridLayout(5, 1));
+				targetPanel.add(devTimeLabel);
+			}
 			targetPanel.add(targetDateLabel);
 			targetPanel.add(targetIntervalLabel);
 			targetPanel.add(intervalsRemainingLabel);

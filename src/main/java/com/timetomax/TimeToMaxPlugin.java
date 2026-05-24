@@ -30,9 +30,16 @@ import static com.google.common.base.MoreObjects.firstNonNull;
 import com.google.inject.Binder;
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
+import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.IsoFields;
 import java.util.EnumSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.inject.Inject;
 import lombok.AccessLevel;
 import lombok.Setter;
@@ -420,7 +427,8 @@ public class TimeToMaxPlugin extends Plugin
 		// Update the startDate for the skill if it isn't already set
 		if (xpState.getSkill(skill).getStartYear() == 9999)
 		{
-			xpState.getSkill(skill).updateStartDate(LocalDate.now().getDayOfMonth(), LocalDate.now().getMonthValue(),LocalDate.now().getYear());
+			LocalDate periodStart = XpCalculator.getCurrentPeriodStart(config.trackingInterval());
+			xpState.getSkill(skill).updateStartDate(periodStart.getDayOfMonth(), periodStart.getMonthValue(), periodStart.getYear());
 		}
 		
 		// Recalculate lowest skill flag after skill state update
@@ -457,7 +465,7 @@ public class TimeToMaxPlugin extends Plugin
 			{
 				log.debug("Loading xp state from save");
 				xpState.restore(save);
-				LocalDate now = LocalDate.now();
+				LocalDate periodStart = XpCalculator.getCurrentPeriodStart(config.trackingInterval());
 
 				for (Skill skill : save.skills.keySet())
 				{
@@ -468,7 +476,7 @@ public class TimeToMaxPlugin extends Plugin
 					skillState.updateGoals(startXp, goalXp);
 					if (xpState.getSkill(skill).getStartYear() == 9999)
 					{
-						xpState.getSkill(skill).updateStartDate(now.getDayOfMonth(), now.getMonthValue(),now.getYear());
+						xpState.getSkill(skill).updateStartDate(periodStart.getDayOfMonth(), periodStart.getMonthValue(), periodStart.getYear());
 					}
 				}
 
@@ -574,7 +582,8 @@ public class TimeToMaxPlugin extends Plugin
 
 		if (xpState.getSkill(skill).getStartYear() == 9999)
 		{
-			xpState.getSkill(skill).updateStartDate(LocalDate.now().getDayOfMonth(), LocalDate.now().getMonthValue(),LocalDate.now().getYear());
+			LocalDate periodStart = XpCalculator.getCurrentPeriodStart(config.trackingInterval());
+			xpState.getSkill(skill).updateStartDate(periodStart.getDayOfMonth(), periodStart.getMonthValue(), periodStart.getYear());
 		}
 
 		xpPanel.updateSkillExperience(true, xpPauseState.isPaused(skill),
@@ -625,11 +634,233 @@ public class TimeToMaxPlugin extends Plugin
 	@Subscribe
 	public void onCommandExecuted(CommandExecuted commandExecuted)
 	{
-		if (commandExecuted.getCommand().equals("ttmreset"))
+		String command = commandExecuted.getCommand();
+		if (command.equals("ttmreset"))
 		{
 			log.debug("TTM Reset command triggered by command");
 			handleTTMReset();
 			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "TTM has been reset by user.", null);
+			return;
+		}
+
+		// Dev-only commands. Hidden from users; enable by launching the JVM with -Dtimetomax.dev=true.
+		if (!DEV_COMMANDS_ENABLED)
+		{
+			return;
+		}
+
+		String[] args = commandExecuted.getArguments();
+		switch (command)
+		{
+			case "ttmdate":
+				handleDevDateCommand(args);
+				break;
+			case "ttmstate":
+				handleDevStateCommand();
+				break;
+			case "ttmgetstart":
+				handleDevGetStartCommand();
+				break;
+		}
+	}
+
+	private static final boolean DEV_COMMANDS_ENABLED = Boolean.getBoolean("timetomax.dev");
+
+	private void devMessage(String message)
+	{
+		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "[TTM dev] " + message, null);
+	}
+
+	private static final DateTimeFormatter DEV_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+	private static final Pattern DURATION_PART = Pattern.compile("(?i)(\\d+)([dhms])");
+
+	private void handleDevDateCommand(String[] args)
+	{
+		if (args == null || args.length == 0 || args[0].trim().equalsIgnoreCase("show"))
+		{
+			showEffectiveTime();
+			return;
+		}
+
+		String arg = args[0].trim();
+
+		if (arg.equalsIgnoreCase("clear") || arg.equalsIgnoreCase("off") || arg.equalsIgnoreCase("none") || arg.equalsIgnoreCase("reset"))
+		{
+			XpCalculator.clearTimeOffset();
+			showEffectiveTime();
+			return;
+		}
+
+		if (arg.startsWith("+") || arg.startsWith("-"))
+		{
+			boolean negative = arg.startsWith("-");
+			Duration delta = parseDurationSpec(arg.substring(1));
+			if (delta == null)
+			{
+				devMessage("Bad shift '" + arg + "'. Use e.g. +1d, -6h, +30m, +45s, or combos like +1d12h.");
+				return;
+			}
+			XpCalculator.shiftTime(negative ? delta.negated() : delta);
+			showEffectiveTime();
+			return;
+		}
+
+		try
+		{
+			LocalDateTime ldt = LocalDateTime.parse(arg);
+			XpCalculator.setOverrideTarget(ldt);
+			showEffectiveTime();
+			return;
+		}
+		catch (DateTimeParseException ignored)
+		{
+		}
+
+		try
+		{
+			LocalDate ld = LocalDate.parse(arg);
+			XpCalculator.setOverrideTarget(ld.atStartOfDay());
+			showEffectiveTime();
+			return;
+		}
+		catch (DateTimeParseException ignored)
+		{
+		}
+
+		devMessage("Bad arg '" + arg + "'. Try YYYY-MM-DD, YYYY-MM-DDTHH:MM, +1d, -6h, +30m, or 'clear'.");
+	}
+
+	private Duration parseDurationSpec(String spec)
+	{
+		if (spec == null || spec.isEmpty())
+		{
+			return null;
+		}
+		Matcher m = DURATION_PART.matcher(spec);
+		long totalSeconds = 0;
+		int matched = 0;
+		int end = 0;
+		while (m.find())
+		{
+			if (m.start() != end)
+			{
+				return null;
+			}
+			long v = Long.parseLong(m.group(1));
+			switch (m.group(2).toLowerCase())
+			{
+				case "d": totalSeconds += v * 86400L; break;
+				case "h": totalSeconds += v * 3600L; break;
+				case "m": totalSeconds += v * 60L; break;
+				case "s": totalSeconds += v; break;
+			}
+			matched++;
+			end = m.end();
+		}
+		if (matched == 0 || end != spec.length())
+		{
+			return null;
+		}
+		return Duration.ofSeconds(totalSeconds);
+	}
+
+	private void showEffectiveTime()
+	{
+		LocalDateTime now = XpCalculator.now();
+		Duration off = XpCalculator.getTimeOffset();
+		devMessage("Now: " + DEV_FMT.format(now) + (off.isZero() ? " (real)" : " (offset " + formatOffsetForChat(off) + ")"));
+	}
+
+	private static String formatOffsetForChat(Duration off)
+	{
+		long secs = off.getSeconds();
+		String sign = secs < 0 ? "-" : "+";
+		secs = Math.abs(secs);
+		long days = secs / 86400;
+		long hours = (secs % 86400) / 3600;
+		long minutes = (secs % 3600) / 60;
+		long seconds = secs % 60;
+		StringBuilder sb = new StringBuilder(sign);
+		if (days > 0) sb.append(days).append("d");
+		if (hours > 0) sb.append(hours).append("h");
+		if (minutes > 0) sb.append(minutes).append("m");
+		if (seconds > 0 || sb.length() == 1) sb.append(seconds).append("s");
+		return sb.toString();
+	}
+
+	private void handleDevStateCommand()
+	{
+		LocalDateTime nowDt = XpCalculator.now();
+		LocalDate now = nowDt.toLocalDate();
+		TrackingInterval interval = config.trackingInterval();
+		Duration off = XpCalculator.getTimeOffset();
+		devMessage("Now: " + DEV_FMT.format(nowDt) + (off.isZero() ? " (real)" : " (offset " + formatOffsetForChat(off) + ")"));
+		devMessage("Interval: " + interval
+			+ ", ISO week-year: " + now.get(IsoFields.WEEK_BASED_YEAR)
+			+ ", ISO week: " + now.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR));
+		devMessage("Target date: " + config.targetDate()
+			+ " (days remaining: " + ChronoUnit.DAYS.between(now, LocalDate.parse(config.targetDate())) + ")");
+		devMessage("Current period start (per fix): " + XpCalculator.getCurrentPeriodStart(interval));
+
+		LocalDate earliest = null;
+		int initialized = 0;
+		for (Skill skill : Skill.values())
+		{
+			XpStateSingle s = xpState.getSkillState(skill);
+			if (s == null || s.getStartXp() == -1)
+			{
+				continue;
+			}
+			initialized++;
+			LocalDate d = s.convertToLocalDate(s.getStartYear(), s.getStartMonth(), s.getStartDay());
+			if (earliest == null || d.isBefore(earliest))
+			{
+				earliest = d;
+			}
+		}
+		devMessage("Initialized skills: " + initialized + ", earliest startDate: " + (earliest != null ? earliest.toString() : "none"));
+
+		LocalDateTime nextBoundary = nextBoundaryAfter(nowDt, interval);
+		Duration until = Duration.between(nowDt, nextBoundary);
+		devMessage("Next reset boundary: " + DEV_FMT.format(nextBoundary) + " (in " + formatOffsetForChat(until) + ")");
+	}
+
+	/**
+	 * Wall-clock time of the next period boundary strictly after {@code from}.
+	 * WEEK = next Monday 00:00; MONTH = 1st of next month 00:00; DAY = tomorrow 00:00.
+	 */
+	private static LocalDateTime nextBoundaryAfter(LocalDateTime from, TrackingInterval interval)
+	{
+		LocalDate d = from.toLocalDate();
+		switch (interval)
+		{
+			case WEEK:
+				LocalDate nextMonday = d.with(java.time.DayOfWeek.MONDAY).plusWeeks(1);
+				return nextMonday.atStartOfDay();
+			case MONTH:
+				return d.withDayOfMonth(1).plusMonths(1).atStartOfDay();
+			default:
+				return d.plusDays(1).atStartOfDay();
+		}
+	}
+
+	private void handleDevGetStartCommand()
+	{
+		int shown = 0;
+		for (Skill skill : Skill.values())
+		{
+			XpStateSingle s = xpState.getSkillState(skill);
+			if (s == null || s.getStartXp() == -1)
+			{
+				continue;
+			}
+			LocalDate d = s.convertToLocalDate(s.getStartYear(), s.getStartMonth(), s.getStartDay());
+			devMessage(skill.getName() + ": startDate=" + d + ", startXp=" + s.getStartXp());
+			shown++;
+		}
+		if (shown == 0)
+		{
+			devMessage("No initialized skills.");
 		}
 	}
 
@@ -668,7 +899,8 @@ public class TimeToMaxPlugin extends Plugin
 
 			if (xpState.getSkill(skill).getStartYear() == 9999)
 			{
-				xpState.getSkill(skill).updateStartDate(LocalDate.now().getDayOfMonth(), LocalDate.now().getMonthValue(),LocalDate.now().getYear());
+				LocalDate periodStart = XpCalculator.getCurrentPeriodStart(config.trackingInterval());
+				xpState.getSkill(skill).updateStartDate(periodStart.getDayOfMonth(), periodStart.getMonthValue(), periodStart.getYear());
 			}
 
 			int startDay = xpState.getSkill(skill).getStartDay();
