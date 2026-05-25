@@ -790,6 +790,11 @@ public class TimeToMaxPlugin extends Plugin
 		LocalDateTime now = XpCalculator.now();
 		Duration off = XpCalculator.getTimeOffset();
 		devMessage("Now: " + DEV_FMT.format(now) + (off.isZero() ? " (real)" : " (offset " + formatOffsetForChat(off) + ")"));
+
+		// Force a panel refresh so date-derived things (daily pace marker, time-left labels)
+		// re-evaluate immediately after a dev time shift instead of waiting for the next XP event.
+		rebuildSkills();
+		xpPanel.updateTargetPanel(config);
 	}
 
 	private static String formatOffsetForChat(Duration off)

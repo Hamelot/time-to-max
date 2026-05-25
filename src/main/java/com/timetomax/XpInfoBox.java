@@ -33,6 +33,9 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
+import java.time.LocalDate;
+import java.util.Collections;
+import java.util.List;
 import javax.swing.ImageIcon;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -118,6 +121,13 @@ class XpInfoBox extends JPanel
 	private final TimeToMaxConfig config;
 
 	private boolean paused = false;
+
+	// Daily pace marker cache. The marker XP is anchored once per calendar day so it stays
+	// fixed on the bar as the user gains XP; it only shifts when the day rolls over or the
+	// interval target changes (interval reset, config edit, etc).
+	private LocalDate markerAnchorDate = null;
+	private int markerAnchorForTarget = -1;
+	private int markerAnchorXp = -1;
 
 	XpInfoBox(TimeToMaxPlugin timeToMaxPlugin, TimeToMaxConfig config, JComponent panel, Skill skill, SkillIconManager iconManager)
 	{
@@ -406,6 +416,13 @@ class XpInfoBox extends JPanel
 			paused = false;
 			pauseSkill.setText("Pause");
 		}
+		// Re-evaluate the daily pace marker on every rebuild (not just XP gains) so that day
+		// rollovers re-anchor it without needing an XP event to trigger refresh.
+		int currentRequiredXpForInterval = XpCalculator.getRequiredXpPerInterval(
+			xpSnapshotSingle.getStartGoalXp(), config);
+		progressBar.setPositions(computeDailyPaceMarker(
+			xpSnapshotSingle.getXpGainedInSession(), currentRequiredXpForInterval));
+
 		// Update information labels
 		// Update exp per hour separately, every time (not only when there's an update)
 		topLeftStat.setText(htmlLabel(config.xpPanelLabel1(), xpSnapshotSingle));
@@ -422,6 +439,44 @@ class XpInfoBox extends JPanel
 		{
 			container.setBorder(null);
 		}
+	}
+
+	/**
+	 * Position (in the 0..100 space the progress bar uses) of a tick showing where the user
+	 * should reach by end of today to stay on pace. The marker XP is anchored once per
+	 * calendar day so it stays put while XP is being gained; it only re-divides the remaining
+	 * deficit across the remaining days when the day rolls over (or the interval resets).
+	 *
+	 * Empty list = no marker drawn (DAY interval, toggle off, already met today's quota,
+	 * or interval target already hit).
+	 */
+	private List<Integer> computeDailyPaceMarker(int xpGained, int requiredXpForInterval)
+	{
+		if (!config.showDailyPaceMarker()
+			|| config.trackingInterval() == TrackingInterval.DAY
+			|| requiredXpForInterval <= 0)
+		{
+			return Collections.emptyList();
+		}
+
+		LocalDate today = XpCalculator.today();
+		if (!today.equals(markerAnchorDate) || markerAnchorForTarget != requiredXpForInterval)
+		{
+			int xpRemainingInInterval = Math.max(0, requiredXpForInterval - xpGained);
+			int daysRemaining = Math.max(1, XpCalculator.getDaysRemainingInInterval(config.trackingInterval()));
+			int todayQuota = (int) Math.ceil((double) xpRemainingInInterval / daysRemaining);
+			markerAnchorXp = xpGained + todayQuota;
+			markerAnchorDate = today;
+			markerAnchorForTarget = requiredXpForInterval;
+		}
+
+		if (markerAnchorXp <= 0)
+		{
+			return Collections.emptyList();
+		}
+
+		int markerPercent = (int) Math.min(100L, ((long) markerAnchorXp * 100L) / requiredXpForInterval);
+		return Collections.singletonList(markerPercent);
 	}
 
 	private String htmlLabel(XpPanelLabel panelLabel, XpSnapshotSingle xpSnapshotSingle)

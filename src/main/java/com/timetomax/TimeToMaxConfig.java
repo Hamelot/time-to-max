@@ -180,6 +180,18 @@ public interface TimeToMaxConfig extends Config
 	}
 
 	@ConfigItem(
+		section = maxingSection,
+		position = 9,
+		keyName = "showDailyPaceMarker",
+		name = "Show daily pace marker",
+		description = "When tracking by week or month, draws a tick on the progress bar at today's catch-up XP target. Recalculates daily so the marker shrinks as you get ahead or grows as you fall behind."
+	)
+	default boolean showDailyPaceMarker()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		section = infoLabelSection,
 		position = 0,
 		keyName = "logoutPausing",

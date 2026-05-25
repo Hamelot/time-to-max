@@ -195,6 +195,29 @@ public class XpCalculator
 	}
 
 	/**
+	 * Number of days remaining in the current interval, counting today as one of them.
+	 * Used to compute the daily catch-up XP target inside a WEEK/MONTH interval.
+	 *
+	 * @param interval The tracking interval
+	 * @return Days remaining (>= 1). Always 1 for DAY.
+	 */
+	public static int getDaysRemainingInInterval(TrackingInterval interval)
+	{
+		LocalDate now = today();
+		switch (interval)
+		{
+			case WEEK:
+				// Mon=1..Sun=7. From Mon, 7 days remain; from Sun, 1.
+				return DayOfWeek.SUNDAY.getValue() - now.getDayOfWeek().getValue() + 1;
+			case MONTH:
+				return now.lengthOfMonth() - now.getDayOfMonth() + 1;
+			case DAY:
+			default:
+				return 1;
+		}
+	}
+
+	/**
 	 * Get the start date of the current period for the given interval, anchored to today.
 	 * Used so a reset that fires late (e.g. user wasn't logged in at the Monday boundary)
 	 * still anchors the new reference to the actual start of the ISO period, preventing
