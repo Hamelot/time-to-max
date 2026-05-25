@@ -487,7 +487,7 @@ public class TimeToMaxPlugin extends Plugin
 				}
 			}
 
-			// Check for xp gained while logged out
+			// Check for xp gained while logged out (e.g. on mobile or another client)
 			for (Skill skill : Skill.values())
 			{
 				if (!xpState.isInitialized(skill))
@@ -508,9 +508,28 @@ public class TimeToMaxPlugin extends Plugin
 					}
 
 					log.debug("Skill xp for {} changed when offline: {} -> {}", skill, skillState.getCurrentXp(), currentXp);
-					// Offset start xp for offline gains
-					long diff = currentXp - skillState.getCurrentXp();
-					skillState.setStartXp(skillState.getStartXp() + diff);
+
+					LocalDate skillStart = skillState.convertToLocalDate(
+						skillState.getStartYear(), skillState.getStartMonth(), skillState.getStartDay());
+					boolean crossedBoundary = XpCalculator.shouldStartNewIntervalForDate(
+						config.trackingInterval(), skillStart);
+
+					if (crossedBoundary)
+					{
+						// Period rolled over while offline — re-baseline this skill against the new period.
+						LocalDate periodStart = XpCalculator.getCurrentPeriodStart(config.trackingInterval());
+						skillState.setStartXp(currentXp);
+						skillState.updateStartDate(periodStart.getDayOfMonth(), periodStart.getMonthValue(), periodStart.getYear());
+						int intervalXp = XpCalculator.getRequiredXpPerInterval(currentXp, config);
+						skillState.updateGoals(currentXp, currentXp + intervalXp);
+					}
+					else
+					{
+						// Same period — credit offline gains (mobile, etc.) toward the current period.
+						int goalStartXp = (int) skillState.getStartXp();
+						int intervalXp = XpCalculator.getRequiredXpPerInterval(goalStartXp, config);
+						xpState.updateSkill(skill, currentXp, goalStartXp, goalStartXp + intervalXp);
+					}
 				}
 			}
 
@@ -549,20 +568,22 @@ public class TimeToMaxPlugin extends Plugin
 		{
 			final int currentXp = client.getSkillExperience(skill);
 			final int currentLevel = Experience.getLevelForXp(currentXp);
+			final long storedStartXp = getSkillState(skill).getStartXp();
+			final int goalBaseline = storedStartXp == -1 ? currentXp : (int) storedStartXp;
 
 			// Only show non-maxed skills
 			if (config.maxSkillMode() == MaxSkillMode.NORMAL)
 			{
 				if ((currentLevel < Experience.MAX_REAL_LEVEL))
 				{
-					setCalculatedSkillExperience(skill, currentXp);
+					setCalculatedSkillExperience(skill, goalBaseline);
 				}
 			}
 			else if (config.maxSkillMode() == MaxSkillMode.COMPLETIONIST)
 			{
 				if (currentXp < Experience.MAX_SKILL_XP)
 				{
-					setCalculatedSkillExperience(skill, currentXp);
+					setCalculatedSkillExperience(skill, goalBaseline);
 				}
 			}
 		}
